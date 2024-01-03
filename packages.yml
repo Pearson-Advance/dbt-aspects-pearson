@@ -1,0 +1,3 @@
+packages:
+  - git: "https://github.com/openedx/aspects-dbt.git"
+    revision: v3.1.1
