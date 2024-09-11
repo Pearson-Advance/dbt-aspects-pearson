@@ -1,0 +1,20 @@
+version: 2
+
+sources:
+  - name: event_sink
+    database: "{{ env_var('ASPECTS_EVENT_SINK_DATABASE', 'event_sink')}}"
+    tables:
+
+      - name: course_licensing_institution_administrator
+        columns:
+          - name: dump_id
+          - name: time_last_dumped
+          - name: id
+          - name: created
+          - name: modified
+          - name: institution_id
+          - name: institution_name
+          - name: user_id
+          - name: user_name
+          - name: user_email
+          - name: active

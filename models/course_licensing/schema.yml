@@ -1,0 +1,12 @@
+version: 2
+
+models:
+  - name: institution_administrators_count
+    description: "Count of institution administrators by institution."
+    columns:
+      - name: institution_id
+        data_type: Int32
+        description: "Id of the institution."
+      - name: institution_administrator_count
+        data_type: Int32
+        description: "Count of institution administrators for each institution."
