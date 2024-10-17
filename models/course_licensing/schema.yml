@@ -1,0 +1,29 @@
+version: 2
+
+models:
+  - name: license_inventory
+    description: >
+      Aggregates key data for licenses, including purchased seats, licensed enrollments,
+      and allowed course enrollments per institution license.
+    columns:
+      - name: license_id
+        data_type: Int32
+        description: "Unique identifier for the license assigned to an institution."
+      - name: license_name
+        data_type: String
+        description: "Descriptive name of the license provided to an institution."
+      - name: purchased_seats
+        data_type: Int32
+        description: "Total number of seats purchased under this license."
+      - name: enrolled
+        data_type: Int32
+        description: "Count of active enrollments under the institution's license."
+      - name: pending
+        data_type: Int32
+        description: "Number of allowed enrollments for courses associated with the institution's license."
+      - name: enrollments_and_allowed
+        data_type: Int32
+        description: "Sum of enrolled and pending."
+      - name: remaining
+        data_type: Int32
+        description: "Purdchased seats minus enrollments_and_allowed which means the purchased seats allowed."
