@@ -1,0 +1,61 @@
+version: 2
+
+sources:
+  - name: event_sink
+    database: "{{ env_var('ASPECTS_EVENT_SINK_DATABASE', 'event_sink')}}"
+    tables:
+
+      - name: course_licensing_license
+        columns:
+          - name: dump_id
+          - name: time_last_dumped
+          - name: id
+          - name: created
+          - name: modified
+          - name: license_name
+          - name: institution_id
+          - name: institution_name
+          - name: master_courses
+          - name: course_access_duration
+          - name: status
+
+      - name: course_licensing_license_order
+        columns:
+          - name: dump_id
+          - name: time_last_dumped
+          - name: id
+          - name: created
+          - name: modified
+          - name: license_id
+          - name: license_name
+          - name: license_status
+          - name: order_reference
+          - name: purchased_seats
+          - name: active
+
+      - name: course_licensing_licensed_enrollment
+        columns:
+          - name: dump_id
+          - name: time_last_dumped
+          - name: id
+          - name: institution_id
+          - name: institution_name
+          - name: license_id
+          - name: license_name
+          - name: license_status
+          - name: student
+          - name: student_email
+          - name: class_name
+          - name: class_id
+          - name: is_active
+          - name: expired
+
+      - name: openedx_course_enrollment_allowed
+        columns:
+          - name: dump_id
+          - name: time_last_dumped
+          - name: id
+          - name: email
+          - name: course_id
+          - name: auto_enroll
+          - name: created
