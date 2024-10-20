@@ -1,3 +1,11 @@
+{{ 
+    config(
+        materialized="materialized_view",
+        schema=env_var("ASPECTS_EVENT_SINK_DATABASE", "event_sink"),
+        post_hook="OPTIMIZE TABLE {{ this }} {{ on_cluster }} FINAL"
+    ) 
+}}
+
 -- Step 1: Get the latest licenses for an institution
 WITH latest_licenses AS (
     SELECT
@@ -103,5 +111,3 @@ ON
     latest_licenses.license_id = allowed_enrollments_by_license.license_id  -- Left join to include pending enrollments data
 GROUP BY
     latest_licenses.license_id  -- Group by license id for final result
-ORDER BY
-    latest_licenses.license_id;  -- Order results by license id
