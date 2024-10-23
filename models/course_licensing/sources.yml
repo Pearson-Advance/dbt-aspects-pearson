@@ -33,6 +33,23 @@ sources:
           - name: purchased_seats
           - name: active
 
+      - name: course_licensing_institution_ccx
+        columns:
+          - name: dump_id
+          - name: time_last_dumped
+          - name: id
+          - name: institution_id
+          - name: institution_name
+          - name: license_id
+          - name: license_name
+          - name: license_status
+          - name: ccx_id
+          - name: ccx_name
+          - name: master_course
+          - name: master_course_name
+          - name: min_students_allowed
+          - name: deleted
+
       - name: course_licensing_licensed_enrollment
         columns:
           - name: dump_id
@@ -48,6 +65,7 @@ sources:
           - name: class_name
           - name: class_id
           - name: is_active
+          - name: end_date
           - name: expired
 
       - name: openedx_course_enrollment_allowed
