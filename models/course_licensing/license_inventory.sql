@@ -1,3 +1,12 @@
+{{ 
+    config(
+        materialized="materialized_view",
+        engine=aspects.get_engine("ReplacingMergeTree()"),
+        primary_key="(license_id)",
+        order_by="(license_id)",
+    ) 
+}}
+
 -- Step 1: Get the latest licenses for an institution
 WITH latest_licenses AS (
     SELECT
@@ -5,7 +14,6 @@ WITH latest_licenses AS (
         license_name,  -- Name of the license
         MAX(time_last_dumped) AS latest_time_last_dumped  -- Most recent time for license data dump
     FROM {{ source("event_sink", "course_licensing_license") }}
-    WHERE institution_id = '{{ var("institution_id", "79") }}'  -- Filter for a specific institution
     GROUP BY id, license_name  -- Group by license id and name to get unique licenses
 ),
 
@@ -103,5 +111,3 @@ ON
     latest_licenses.license_id = allowed_enrollments_by_license.license_id  -- Left join to include pending enrollments data
 GROUP BY
     latest_licenses.license_id  -- Group by license id for final result
-ORDER BY
-    latest_licenses.license_id;  -- Order results by license id
