@@ -12,9 +12,10 @@ WITH latest_licenses AS (
     SELECT
         id AS license_id,  -- License identifier
         license_name,  -- Name of the license
+        institution_id,  -- Institution identifier
         MAX(time_last_dumped) AS latest_time_last_dumped  -- Most recent time for license data dump
     FROM {{ source("event_sink", "course_licensing_license") }}
-    GROUP BY id, license_name  -- Group by license id and name to get unique licenses
+    GROUP BY id, license_name, institution_id  -- Group by license id, name and institution_id to get unique licenses
 ),
 
 -- Step 2: Find the most recent record for each license
@@ -81,6 +82,7 @@ allowed_enrollments_by_license AS (
 -- Step 7: Final selection and calculation of key metrics
 SELECT
     latest_licenses.license_id AS license_id,  -- License identifier
+    MAX(latest_licenses.institution_id) AS institution_id,  -- Institution identifier
     MAX(latest_licenses.license_name) AS license_name,  -- License name
     SUM(toInt32(license_order.purchased_seats)) AS purchased_seats,  -- Total purchased seats
     COALESCE(MAX(enrollments_by_license.enrolled), 0) AS enrolled,  -- Number of enrollments, or 0 if none
