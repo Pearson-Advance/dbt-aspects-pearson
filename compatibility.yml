@@ -1,0 +1,17 @@
+compatibility:
+  openedx_release: "ulmo"
+  tutor:
+    major: 21
+  tutor_contrib_aspects: "3.0.3"
+  aspects_dbt:
+    revision: "v8.0.0"
+    resolved_commit: "a437d09497507b7eac17d9a7b18a0f8a93ecff93"
+  runtime:
+    python: "3.12"
+    clickhouse_server: "25.8"
+    dbt_core: ">=1.9.0,<1.10.0"
+    dbt_clickhouse: "1.9.4"
+  databases:
+    target: "reporting"
+    event_sink: "event_sink"
+    xapi: "xapi"

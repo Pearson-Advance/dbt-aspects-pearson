@@ -1,0 +1,2 @@
+-r requirements.txt
+shandy-sqlfmt[jinjafmt]==0.26.0

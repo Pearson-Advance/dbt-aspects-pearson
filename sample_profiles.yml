@@ -1,0 +1,21 @@
+aspects:
+  target: local
+  outputs:
+    local:
+      type: clickhouse
+      schema: "{{ env_var('DBT_PROFILE_TARGET_DATABASE', 'reporting') }}"
+      host: "{{ env_var('CLICKHOUSE_HOST', 'localhost') }}"
+      port: 8123
+      user: "{{ env_var('CLICKHOUSE_USER', 'ch_admin') }}"
+      password: "{{ env_var('CLICKHOUSE_PASSWORD') }}"
+      secure: false
+      retries: 3
+      compression: lz4
+      connect_timeout: 10
+      send_receive_timeout: 300
+      threads: 2
+      custom_settings:
+        memory_overcommit_ratio_denominator_for_user: 0
+        database_atomic_delay_before_drop_table_sec: 0
+        database_atomic_wait_for_drop_and_detach_synchronously: 1
+        check_table_dependencies: 0
