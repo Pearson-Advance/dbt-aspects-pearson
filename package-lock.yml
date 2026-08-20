@@ -1,0 +1,8 @@
+packages:
+  - git: https://github.com/openedx/aspects-dbt.git
+    revision: a437d09497507b7eac17d9a7b18a0f8a93ecff93
+  - package: dbt-labs/codegen
+    version: 0.13.1
+  - package: dbt-labs/dbt_utils
+    version: 1.3.0
+sha1_hash: d183b7c6075e86b92885d4363d9744ddc20f5ec5
