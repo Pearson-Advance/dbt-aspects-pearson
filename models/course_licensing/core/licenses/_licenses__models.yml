@@ -1,0 +1,179 @@
+version: 2
+
+models:
+  - name: mv_course_licensing_license_latest_state
+    description: >
+      Incrementally-maintained argMax aggregate state, one row per source_id,
+      tracking the most recent event recorded for each License record.
+      Backed by an AggregatingMergeTree materialized view, so new raw events
+      are absorbed automatically as they arrive — no dbt run required to
+      stay current.
+
+
+      Not covered by dbt unit tests: the latest_state column is a ClickHouse
+      AggregateFunction, and ClickHouse does not support deserializing that
+      type for dbt's expected-vs-actual comparison. Deduplication behavior
+      for this model is validated with a real-ClickHouse integration check
+      instead of dbt's native unit_tests mechanism.
+    columns:
+      - name: source_id
+        description: Raw Django primary key of the source License row.
+        data_tests:
+          - not_null
+      - name: latest_state
+        description: >
+          Opaque argMaxState(...) aggregate holding every value column for
+          the most recent event of this source_id. Read it only through
+          int_course_licensing_license_latest_state, which resolves it into
+          plain columns with argMaxMerge.
+
+  - name: int_course_licensing_license_latest_state
+    description: >
+      One row per source_id, resolved from
+      mv_course_licensing_license_latest_state into plain columns — the most
+      recent UPSERT or DELETE event recorded for each License record,
+      regardless of whether that record is currently deleted.
+    columns:
+      - name: source_id
+        description: Raw Django primary key of the source License row.
+        data_tests:
+          - unique
+          - not_null
+      - name: institution_id
+        description: Raw Django primary key of the related Institution row.
+      - name: course_id
+        description: >
+          Course key this license is scoped to, when the license grants
+          access to a single course rather than a catalog of master courses.
+          Nullable — most licenses are scoped by master_courses/catalogs
+          instead.
+      - name: is_deleted
+        description: >
+          Sink tombstone flag for this event. Stored as the sink's own
+          'True'/'False' string values.
+        data_tests:
+          - accepted_values:
+              values: ["True", "False"]
+      - name: time_last_dumped
+        description: When this event was written to ClickHouse.
+      - name: sink_event_id
+        description: >
+          Unique identifier for this specific sink event; the final
+          tie-breaker in the latest-state ordering when every other field
+          in the tuple matches.
+
+  - name: int_course_licensing_license_current
+    description: >
+      Current-state view of License records: exactly one row per source_id
+      whose most recent event was not a DELETE. This is the model reporting
+      and dashboards should query — never the raw event_sink table directly.
+    data_tests:
+      - course_licensing_current_matches_latest_event:
+          source_name: course_licensing_event_sink
+          source_table: course_licensing_license
+    columns:
+      - name: source_id
+        description: Raw Django primary key of the source License row.
+        data_tests:
+          - unique
+          - not_null
+      - name: institution_id
+        description: >
+          Raw Django primary key of the related Institution row. Must exist
+          as an active source_id in int_course_licensing_institution_current.
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('int_course_licensing_institution_current')
+              field: source_id
+      - name: is_deleted
+        description: Always 'False' here by construction — tombstones are filtered out.
+        data_tests:
+          - accepted_values:
+              values: ["False"]
+
+  - name: mv_course_licensing_license_order_latest_state
+    description: >
+      Incrementally-maintained argMax aggregate state, one row per source_id,
+      tracking the most recent event recorded for each LicenseOrder record.
+      Backed by an AggregatingMergeTree materialized view, so new raw events
+      are absorbed automatically as they arrive — no dbt run required to
+      stay current.
+
+
+      Not covered by dbt unit tests: the latest_state column is a ClickHouse
+      AggregateFunction, and ClickHouse does not support deserializing that
+      type for dbt's expected-vs-actual comparison. Deduplication behavior
+      for this model is validated with a real-ClickHouse integration check
+      instead of dbt's native unit_tests mechanism.
+    columns:
+      - name: source_id
+        description: Raw Django primary key of the source LicenseOrder row.
+        data_tests:
+          - not_null
+      - name: latest_state
+        description: >
+          Opaque argMaxState(...) aggregate holding every value column for
+          the most recent event of this source_id. Read it only through
+          int_course_licensing_license_order_latest_state, which resolves it
+          into plain columns with argMaxMerge.
+
+  - name: int_course_licensing_license_order_latest_state
+    description: >
+      One row per source_id, resolved from
+      mv_course_licensing_license_order_latest_state into plain columns —
+      the most recent UPSERT or DELETE event recorded for each LicenseOrder
+      record, regardless of whether that record is currently deleted.
+    columns:
+      - name: source_id
+        description: Raw Django primary key of the source LicenseOrder row.
+        data_tests:
+          - unique
+          - not_null
+      - name: license_id
+        description: Raw Django primary key of the related License row.
+      - name: is_deleted
+        description: >
+          Sink tombstone flag for this event. Stored as the sink's own
+          'True'/'False' string values.
+        data_tests:
+          - accepted_values:
+              values: ["True", "False"]
+      - name: time_last_dumped
+        description: When this event was written to ClickHouse.
+      - name: sink_event_id
+        description: >
+          Unique identifier for this specific sink event; the final
+          tie-breaker in the latest-state ordering when every other field
+          in the tuple matches.
+
+  - name: int_course_licensing_license_order_current
+    description: >
+      Current-state view of LicenseOrder records: exactly one row per
+      source_id whose most recent event was not a DELETE. This is the model
+      reporting and dashboards should query — never the raw event_sink table
+      directly.
+    data_tests:
+      - course_licensing_current_matches_latest_event:
+          source_name: course_licensing_event_sink
+          source_table: course_licensing_license_order
+    columns:
+      - name: source_id
+        description: Raw Django primary key of the source LicenseOrder row.
+        data_tests:
+          - unique
+          - not_null
+      - name: license_id
+        description: >
+          Raw Django primary key of the related License row. Must exist as
+          an active source_id in int_course_licensing_license_current.
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('int_course_licensing_license_current')
+              field: source_id
+      - name: is_deleted
+        description: Always 'False' here by construction — tombstones are filtered out.
+        data_tests:
+          - accepted_values:
+              values: ["False"]

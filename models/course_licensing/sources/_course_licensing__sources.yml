@@ -1,0 +1,193 @@
+version: 2
+
+sources:
+  - name: course_licensing_event_sink
+    database: "{{ env_var('ASPECTS_EVENT_SINK_DATABASE', 'event_sink') }}"
+    tables:
+      - name: course_licensing_course_enrollment_allowed
+        description: >
+          Append-only history of course_licensing pending-enrollment events
+          (openedx.CourseEnrollmentAllowed). One row per UPSERT or DELETE
+          event; the current record per source_id must be resolved downstream.
+        loaded_at_field: time_last_dumped
+        columns:
+          - name: source_id
+          - name: id
+          - name: email
+          - name: user_id
+          - name: course_id
+          - name: auto_enroll
+          - name: created
+          - name: operation
+          - name: is_deleted
+          - name: source_updated_at
+          - name: time_last_dumped
+          - name: dump_id
+          - name: sink_event_id
+          - name: schema_version
+
+      - name: course_licensing_institution
+        description: >
+          Append-only history of Institution events. One row per UPSERT or
+          DELETE event; the current record per source_id must be resolved
+          downstream.
+        loaded_at_field: time_last_dumped
+        columns:
+          - name: source_id
+          - name: id
+          - name: created
+          - name: modified
+          - name: name
+          - name: short_name
+          - name: active
+          - name: uuid
+          - name: external_id
+          - name: has_bulk_register
+          - name: support_link
+          - name: operation
+          - name: is_deleted
+          - name: source_updated_at
+          - name: time_last_dumped
+          - name: dump_id
+          - name: sink_event_id
+          - name: schema_version
+
+      - name: course_licensing_institution_administrator
+        description: >
+          Append-only history of InstitutionAdministrator events. One row
+          per UPSERT or DELETE event; the current record per source_id must
+          be resolved downstream.
+        loaded_at_field: time_last_dumped
+        columns:
+          - name: source_id
+          - name: id
+          - name: created
+          - name: modified
+          - name: institution_id
+          - name: institution_name
+          - name: user_id
+          - name: user_name
+          - name: user_email
+          - name: active
+          - name: operation
+          - name: is_deleted
+          - name: source_updated_at
+          - name: time_last_dumped
+          - name: dump_id
+          - name: sink_event_id
+          - name: schema_version
+
+      - name: course_licensing_license
+        description: >
+          Append-only history of License events. One row per UPSERT or
+          DELETE event; the current record per source_id must be resolved
+          downstream.
+        loaded_at_field: time_last_dumped
+        columns:
+          - name: source_id
+          - name: id
+          - name: created
+          - name: modified
+          - name: license_name
+          - name: institution_id
+          - name: institution_name
+          - name: master_courses
+          - name: catalogs
+          - name: course_id
+          - name: course_access_duration
+          - name: status
+          - name: license_type
+          - name: operation
+          - name: is_deleted
+          - name: source_updated_at
+          - name: time_last_dumped
+          - name: dump_id
+          - name: sink_event_id
+          - name: schema_version
+
+      - name: course_licensing_license_order
+        description: >
+          Append-only history of LicenseOrder events. One row per UPSERT or
+          DELETE event; the current record per source_id must be resolved
+          downstream.
+        loaded_at_field: time_last_dumped
+        columns:
+          - name: source_id
+          - name: id
+          - name: created
+          - name: modified
+          - name: license_id
+          - name: license_name
+          - name: license_status
+          - name: order_reference
+          - name: purchased_seats
+          - name: active
+          - name: operation
+          - name: is_deleted
+          - name: source_updated_at
+          - name: time_last_dumped
+          - name: dump_id
+          - name: sink_event_id
+          - name: schema_version
+
+      - name: course_licensing_institution_ccx
+        description: >
+          Append-only history of InstitutionCCX (class) events. One row per
+          UPSERT or DELETE event; the current record per source_id must be
+          resolved downstream.
+        loaded_at_field: time_last_dumped
+        columns:
+          - name: source_id
+          - name: id
+          - name: institution_id
+          - name: institution_name
+          - name: license_id
+          - name: license_name
+          - name: license_status
+          - name: ccx_id
+          - name: ccx_name
+          - name: master_course
+          - name: master_course_name
+          - name: custom_course
+          - name: min_students_allowed
+          - name: deleted
+          - name: operation
+          - name: is_deleted
+          - name: source_updated_at
+          - name: time_last_dumped
+          - name: dump_id
+          - name: sink_event_id
+          - name: schema_version
+
+      - name: course_licensing_licensed_enrollment
+        description: >
+          Append-only history of LicensedEnrollment events. One row per
+          UPSERT or DELETE event; the current record per source_id must be
+          resolved downstream.
+        loaded_at_field: time_last_dumped
+        columns:
+          - name: source_id
+          - name: id
+          - name: institution_id
+          - name: institution_name
+          - name: institution_ccx_id
+          - name: license_id
+          - name: license_name
+          - name: license_status
+          - name: user_id
+          - name: student
+          - name: student_email
+          - name: class_name
+          - name: class_id
+          - name: enrollment_mode
+          - name: enrollment_created
+          - name: is_active
+          - name: end_date
+          - name: expired
+          - name: operation
+          - name: is_deleted
+          - name: source_updated_at
+          - name: time_last_dumped
+          - name: dump_id
+          - name: sink_event_id
+          - name: schema_version

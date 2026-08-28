@@ -1,0 +1,13 @@
+{{
+    config(
+        tags=[
+            "course_licensing",
+            "course_licensing_institutions",
+            "course_licensing_current",
+        ],
+    )
+}}
+
+select *
+from {{ ref("int_course_licensing_institution_administrator_latest_state") }}
+where is_deleted != 'True'

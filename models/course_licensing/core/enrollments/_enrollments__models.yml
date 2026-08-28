@@ -1,0 +1,327 @@
+version: 2
+
+models:
+  - name: mv_course_licensing_course_enrollment_allowed_latest_state
+    description: >
+      Incrementally-maintained argMax aggregate state, one row per source_id,
+      tracking the most recent event recorded for each course_licensing
+      pending-enrollment record. Backed by an AggregatingMergeTree
+      materialized view, so new raw events are absorbed automatically as they
+      arrive — no dbt run required to stay current.
+
+
+      Not covered by dbt unit tests: the latest_state column is a ClickHouse
+      AggregateFunction, and ClickHouse does not support deserializing that
+      type for dbt's expected-vs-actual comparison (confirmed by attempting
+      it — fails with "deserialization not supported"). Deduplication
+      behavior for this model is validated with a real-ClickHouse integration
+      check instead of dbt's native unit_tests mechanism.
+    columns:
+      - name: source_id
+        description: Raw Django primary key of the source CourseEnrollmentAllowed row.
+        data_tests:
+          - not_null
+      - name: latest_state
+        description: >
+          Opaque argMaxState(...) aggregate holding every value column for
+          the most recent event of this source_id. Read it only through
+          int_course_licensing_course_enrollment_allowed_latest_state, which
+          resolves it into plain columns with argMaxMerge.
+
+  - name: int_course_licensing_course_enrollment_allowed_latest_state
+    description: >
+      One row per source_id, resolved from
+      mv_course_licensing_course_enrollment_allowed_latest_state into plain
+      columns — the most recent UPSERT or DELETE event recorded for each
+      pending-enrollment record, regardless of whether that record is
+      currently deleted.
+    columns:
+      - name: source_id
+        description: Raw Django primary key of the source CourseEnrollmentAllowed row.
+        data_tests:
+          - unique
+          - not_null
+      - name: id
+        description: >
+          Django primary key of the source row. Same value as source_id;
+          kept for parity with the raw sink's own column contract.
+      - name: email
+        description: Email address the pending enrollment was created for.
+        data_tests:
+          - not_null
+      - name: user_id
+        description: >
+          Resolved user id once the email matches a registered account; null
+          while the enrollment is still pending.
+      - name: course_id
+        description: Course key the learner is allowed to enroll in.
+        data_tests:
+          - not_null
+      - name: auto_enroll
+        description: >
+          Whether the learner is enrolled automatically on registration.
+          Stored as the sink's own 'True'/'False' string values.
+      - name: created
+        description: Source-side creation timestamp of the CourseEnrollmentAllowed row.
+      - name: operation
+        description: Sink operation this event represents.
+        data_tests:
+          - accepted_values:
+              values: ["UPSERT", "DELETE"]
+      - name: is_deleted
+        description: >
+          Sink tombstone flag for this event. Stored as the sink's own
+          'True'/'False' string values; not the same thing as any
+          model-level "deleted"/"active" field a source entity might have.
+        data_tests:
+          - accepted_values:
+              values: ["True", "False"]
+      - name: source_updated_at
+        description: Best available source-side update timestamp for this event.
+      - name: time_last_dumped
+        description: When this event was written to ClickHouse.
+      - name: dump_id
+        description: Identifier of the dump batch this event belongs to.
+      - name: sink_event_id
+        description: >
+          Unique identifier for this specific sink event; the final
+          tie-breaker in the latest-state ordering when every other field
+          in the tuple matches.
+      - name: schema_version
+        description: Sink schema version this row was written under.
+
+  - name: int_course_licensing_course_enrollment_allowed_current
+    description: >
+      Current-state view of course_licensing pending enrollments: exactly
+      one row per source_id whose most recent event was not a DELETE. This
+      is the model reporting and dashboards should query — never the raw
+      event_sink table directly.
+    data_tests:
+      - course_licensing_current_matches_latest_event:
+          source_name: course_licensing_event_sink
+          source_table: course_licensing_course_enrollment_allowed
+    columns:
+      - name: source_id
+        description: Raw Django primary key of the source CourseEnrollmentAllowed row.
+        data_tests:
+          - unique
+          - not_null
+      - name: email
+        description: Email address the pending enrollment was created for.
+        data_tests:
+          - not_null
+      - name: course_id
+        description: >
+          Course key the learner is allowed to enroll in. Not every value
+          relates to a licensed class: CourseEnrollmentAllowed is a
+          platform-owned Open edX model shared by regular course invites and
+          licensed-class invites alike, and carries no FK to license or
+          institution_ccx. A row only belongs to Course Licensing when this
+          value resolves to a real institution_ccx.ccx_id — not every
+          course_id shaped like a CCX key does (a CCX can exist without ever
+          going through Course Licensing). int_course_licensing_enrollment_current
+          is where that resolution actually happens, via an inner join
+          instead of a pattern match, mirroring the same opportunistic join
+          Pearson's own license-enrollment counting logic uses. This column
+          has no test of its own for that reason; the inclusion/exclusion
+          behavior is tested directly on int_course_licensing_enrollment_current.
+        data_tests:
+          - not_null
+      - name: is_deleted
+        description: Always 'False' here by construction — tombstones are filtered out.
+        data_tests:
+          - accepted_values:
+              values: ["False"]
+
+  - name: int_course_licensing_enrollment_current
+    description: >
+      Business-level union of every current Course Licensing enrollment:
+      licensed_enrollment rows plus the subset of course_enrollment_allowed
+      rows that are genuinely pending against a real class (see
+      enrollment_source and the course_id column doc on
+      int_course_licensing_course_enrollment_allowed_current for why not
+      every pending row qualifies). This is the model reporting and
+      dashboards should query for a unified enrollment picture — never
+      licensed_enrollment or course_enrollment_allowed directly when the
+      question spans both.
+    columns:
+      - name: enrollment_key
+        description: >
+          Collision-safe identifier: '<enrollment_source>:<source_id>'.
+          licensed_enrollment and course_enrollment_allowed each have their
+          own independent source_id sequence, so source_id alone is not
+          unique across this union.
+        data_tests:
+          - unique
+          - not_null
+      - name: enrollment_source
+        description: Which raw entity this row came from.
+        data_tests:
+          - accepted_values:
+              values: ["licensed_enrollment", "course_enrollment_allowed"]
+      - name: source_id
+        description: >
+          Raw Django primary key within enrollment_source's own table. Only
+          unique combined with enrollment_source — see enrollment_key.
+        data_tests:
+          - not_null
+      - name: institution_id
+        description: Raw Django primary key of the related Institution row.
+        data_tests:
+          - not_null
+      - name: institution_ccx_id
+        description: Raw Django primary key of the related InstitutionCCX (class) row.
+        data_tests:
+          - not_null
+      - name: license_id
+        description: >
+          Raw Django primary key of the related License row. Nullable — an
+          enrollment or class is not always license-scoped.
+      - name: user_id
+        description: >
+          Resolved user id. Always null for a pending row by construction —
+          that is precisely what "pending" means here.
+      - name: learner_email
+        description: Learner's email address, from whichever source this row came from.
+        data_tests:
+          - not_null
+      - name: class_id
+        description: CCX course key of the related class.
+        data_tests:
+          - not_null
+      - name: class_name
+        description: Display name of the related class.
+      - name: enrollment_status
+        description: >
+          'Active', 'Inactive', or 'Expired' for a licensed_enrollment row
+          (derived from is_active/expired); always 'Pending' for a
+          course_enrollment_allowed row.
+        data_tests:
+          - accepted_values:
+              values: ["Active", "Inactive", "Expired", "Pending"]
+      - name: consumes_seat
+        description: >
+          Whether this row counts against the class's licensed seat
+          capacity. True for a licensed_enrollment row that is active or
+          expired (both hold a seat), and always true for a pending row (a
+          pending invite reserves a seat).
+      - name: created
+        description: Source-side creation timestamp of this enrollment or pending invite.
+        data_tests:
+          - not_null
+      - name: end_date
+        description: >
+          Licensed access end date. Always null for a pending row — it has
+          no access yet to have an end date for.
+
+  - name: mv_course_licensing_licensed_enrollment_latest_state
+    description: >
+      Incrementally-maintained argMax aggregate state, one row per source_id,
+      tracking the most recent event recorded for each LicensedEnrollment
+      record. Backed by an AggregatingMergeTree materialized view, so new raw
+      events are absorbed automatically as they arrive — no dbt run required
+      to stay current.
+
+
+      Not covered by dbt unit tests: the latest_state column is a ClickHouse
+      AggregateFunction, and ClickHouse does not support deserializing that
+      type for dbt's expected-vs-actual comparison. Deduplication behavior
+      for this model is validated with a real-ClickHouse integration check
+      instead of dbt's native unit_tests mechanism.
+    columns:
+      - name: source_id
+        description: Raw Django primary key of the source LicensedEnrollment row.
+        data_tests:
+          - not_null
+      - name: latest_state
+        description: >
+          Opaque argMaxState(...) aggregate holding every value column for
+          the most recent event of this source_id. Read it only through
+          int_course_licensing_licensed_enrollment_latest_state, which
+          resolves it into plain columns with argMaxMerge.
+
+  - name: int_course_licensing_licensed_enrollment_latest_state
+    description: >
+      One row per source_id, resolved from
+      mv_course_licensing_licensed_enrollment_latest_state into plain
+      columns — the most recent UPSERT or DELETE event recorded for each
+      LicensedEnrollment record, regardless of whether that record is
+      currently deleted.
+    columns:
+      - name: source_id
+        description: Raw Django primary key of the source LicensedEnrollment row.
+        data_tests:
+          - unique
+          - not_null
+      - name: institution_id
+        description: Raw Django primary key of the related Institution row.
+      - name: institution_ccx_id
+        description: Raw Django primary key of the related InstitutionCCX (class) row.
+      - name: license_id
+        description: >
+          Raw Django primary key of the related License row. Nullable — an
+          enrollment is not always license-scoped.
+      - name: is_deleted
+        description: >
+          Sink tombstone flag for this event. Stored as the sink's own
+          'True'/'False' string values.
+        data_tests:
+          - accepted_values:
+              values: ["True", "False"]
+      - name: time_last_dumped
+        description: When this event was written to ClickHouse.
+      - name: sink_event_id
+        description: >
+          Unique identifier for this specific sink event; the final
+          tie-breaker in the latest-state ordering when every other field
+          in the tuple matches.
+
+  - name: int_course_licensing_licensed_enrollment_current
+    description: >
+      Current-state view of LicensedEnrollment records: exactly one row per
+      source_id whose most recent event was not a DELETE. This is the model
+      reporting and dashboards should query — never the raw event_sink
+      table directly.
+    data_tests:
+      - course_licensing_current_matches_latest_event:
+          source_name: course_licensing_event_sink
+          source_table: course_licensing_licensed_enrollment
+    columns:
+      - name: source_id
+        description: Raw Django primary key of the source LicensedEnrollment row.
+        data_tests:
+          - unique
+          - not_null
+      - name: institution_id
+        description: >
+          Raw Django primary key of the related Institution row. Must exist
+          as an active source_id in int_course_licensing_institution_current.
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('int_course_licensing_institution_current')
+              field: source_id
+      - name: institution_ccx_id
+        description: >
+          Raw Django primary key of the related InstitutionCCX (class) row.
+          Must exist as an active source_id in
+          int_course_licensing_institution_ccx_current.
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('int_course_licensing_institution_ccx_current')
+              field: source_id
+      - name: license_id
+        description: >
+          Raw Django primary key of the related License row, when this
+          enrollment is license-scoped. Nullable values are exempt from the
+          relationship check by dbt's own semantics.
+        data_tests:
+          - relationships:
+              to: ref('int_course_licensing_license_current')
+              field: source_id
+      - name: is_deleted
+        description: Always 'False' here by construction — tombstones are filtered out.
+        data_tests:
+          - accepted_values:
+              values: ["False"]

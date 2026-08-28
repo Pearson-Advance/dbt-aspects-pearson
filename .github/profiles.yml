@@ -1,0 +1,12 @@
+aspects:
+  target: ci
+  outputs:
+    ci:
+      type: clickhouse
+      schema: reporting
+      host: localhost
+      port: 8123
+      user: default
+      password: ""
+      secure: false
+      threads: 2
