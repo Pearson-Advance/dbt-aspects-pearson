@@ -1,0 +1,97 @@
+name: dbt static checks
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dbt-static-checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate dbt project and Course Licensing tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DBT_PROFILES_DIR: .github
+      DBT_SEND_ANONYMOUS_USAGE_STATS: "false"
+      ASPECTS_EVENT_SINK_DATABASE: event_sink
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+
+      - name: Validate repository contract
+        run: python scripts/validate_project.py
+
+      - name: Validate Course Licensing model and test contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          for script in scripts/validate_course_licensing_*.py; do
+            echo "::group::$script"
+            python "$script"
+            echo "::endgroup::"
+          done
+
+      - name: Check ClickHouse SQL formatting
+        run: make format-check
+
+      - name: Resolve dbt packages
+        run: dbt deps
+
+      - name: Parse dbt project
+        run: dbt parse --no-partial-parse
+
+      - name: Verify Course Licensing CI inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Scales automatically as Course Licensing entities are added: every
+          # int_..._current model must carry exactly one unit test. No fixed
+          # counts, so adding an entity never requires touching this step.
+          current_model_count="$({
+            dbt --quiet ls \
+              --resource-type model \
+              --select tag:course_licensing_current \
+              --output name
+          } | sed '/^[[:space:]]*$/d' | wc -l | tr -d ' ')"
+
+          unit_test_count="$({
+            dbt --quiet ls \
+              --resource-type unit_test \
+              --select tag:course_licensing_current \
+              --output name
+          } | sed '/^[[:space:]]*$/d' | wc -l | tr -d ' ')"
+
+          test "$current_model_count" -gt 0 || {
+            echo "Expected at least one Course Licensing current model." >&2
+            exit 1
+          }
+
+          test "$current_model_count" -eq "$unit_test_count" || {
+            echo "Expected one unit test per current model: $current_model_count current model(s), $unit_test_count unit test(s)." >&2
+            exit 1
+          }
+
+          echo "Validated $current_model_count current model(s), each with exactly one unit test."

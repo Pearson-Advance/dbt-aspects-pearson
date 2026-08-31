@@ -1,0 +1,224 @@
+unit_tests:
+  - name: test_course_licensing_course_enrollment_allowed_current_filters_tombstones
+    description: >
+      The current view keeps the latest active pending-enrollment record and
+      excludes any record whose latest event is a deletion tombstone. Mocks
+      int_course_licensing_course_enrollment_allowed_latest_state directly,
+      since the upstream mv_ layer (argMaxState) cannot be covered by dbt
+      unit tests — see the note on that model. Uses format: sql throughout;
+      dbt-clickhouse 1.9.4 on dbt-core 1.9.11 fails with a "get_expected_sql
+      takes not more than 2 argument(s)" compiler error on the inline
+      list-of-dicts rows: format, regardless of the target model's own
+      materialization. UUIDs are fixed literals, not generateUUIDv4(), so
+      the expected rows are deterministic and comparable.
+    model: int_course_licensing_course_enrollment_allowed_current
+    given:
+      - input: ref("int_course_licensing_course_enrollment_allowed_latest_state")
+        format: sql
+        rows: |
+          select
+              '1' as source_id, '1' as id, 'active@example.com' as email,
+              cast(null as Nullable(String)) as user_id,
+              'course-v1:TEST+ACTIVE+2026' as course_id, 'True' as auto_enroll,
+              '2026-01-01T00:00:00Z' as created, 'UPSERT' as operation,
+              'False' as is_deleted,
+              '2026-01-01 00:00:00.000000+00:00' as source_updated_at,
+              '2026-01-01 00:00:01.000000+00:00' as time_last_dumped,
+              toUUID('11111111-1111-1111-1111-111111111111') as dump_id,
+              toUUID('22222222-2222-2222-2222-222222222221') as sink_event_id,
+              '2' as schema_version
+          union all
+          select
+              '2', '2', 'deleted@example.com', cast(null as Nullable(String)),
+              'course-v1:TEST+DELETED+2026', 'True',
+              '2026-01-01T00:00:00Z', 'DELETE', 'True',
+              '2026-01-01 01:00:00.000000+00:00',
+              '2026-01-01 01:00:01.000000+00:00',
+              toUUID('11111111-1111-1111-1111-111111111112'),
+              toUUID('22222222-2222-2222-2222-222222222222'),
+              '2'
+    expect:
+      format: sql
+      rows: |
+        select
+            '1' as source_id, '1' as id, 'active@example.com' as email,
+            cast(null as Nullable(String)) as user_id,
+            'course-v1:TEST+ACTIVE+2026' as course_id, 'True' as auto_enroll,
+            '2026-01-01T00:00:00Z' as created, 'UPSERT' as operation,
+            'False' as is_deleted,
+            '2026-01-01 00:00:00.000000+00:00' as source_updated_at,
+            '2026-01-01 00:00:01.000000+00:00' as time_last_dumped,
+            toUUID('11111111-1111-1111-1111-111111111111') as dump_id,
+            toUUID('22222222-2222-2222-2222-222222222221') as sink_event_id,
+            '2' as schema_version
+
+  - name: test_course_licensing_licensed_enrollment_current_filters_tombstones
+    description: >
+      The current view keeps the latest active LicensedEnrollment record and
+      excludes any record whose latest event is a deletion tombstone. Mocks
+      int_course_licensing_licensed_enrollment_latest_state directly, for
+      the same reasons documented on the course_enrollment_allowed unit test
+      above.
+    model: int_course_licensing_licensed_enrollment_current
+    given:
+      - input: ref("int_course_licensing_licensed_enrollment_latest_state")
+        format: sql
+        rows: |
+          select
+              '1' as source_id, '1' as id, '1' as institution_id,
+              'Active University' as institution_name, '1' as institution_ccx_id,
+              '1' as license_id, 'Active License' as license_name,
+              'active' as license_status, '10' as user_id,
+              'Jane Student' as student, 'jane.student@example.com' as student_email,
+              'Active Class' as class_name, 'ccx-1' as class_id,
+              'honor' as enrollment_mode, '2026-01-01T00:00:00Z' as enrollment_created,
+              'True' as is_active, cast(null as Nullable(String)) as end_date,
+              'False' as expired, 'UPSERT' as operation, 'False' as is_deleted,
+              '2026-01-01 00:00:00.000000+00:00' as source_updated_at,
+              '2026-01-01 00:00:01.000000+00:00' as time_last_dumped,
+              toUUID('11111111-1111-1111-1111-111111111111') as dump_id,
+              toUUID('22222222-2222-2222-2222-222222222221') as sink_event_id,
+              '2' as schema_version
+          union all
+          select
+              '2', '2', '1', 'Active University', '1',
+              '1', 'Active License', 'active', '20',
+              'John Student', 'john.student@example.com',
+              'Active Class', 'ccx-1', 'honor', '2026-01-01T00:00:00Z',
+              'False', '2026-01-02T00:00:00Z', 'True', 'DELETE', 'True',
+              '2026-01-01 01:00:00.000000+00:00',
+              '2026-01-01 01:00:01.000000+00:00',
+              toUUID('11111111-1111-1111-1111-111111111112'),
+              toUUID('22222222-2222-2222-2222-222222222222'),
+              '2'
+    expect:
+      format: sql
+      rows: |
+        select
+            '1' as source_id, '1' as id, '1' as institution_id,
+            'Active University' as institution_name, '1' as institution_ccx_id,
+            '1' as license_id, 'Active License' as license_name,
+            'active' as license_status, '10' as user_id,
+            'Jane Student' as student, 'jane.student@example.com' as student_email,
+            'Active Class' as class_name, 'ccx-1' as class_id,
+            'honor' as enrollment_mode, '2026-01-01T00:00:00Z' as enrollment_created,
+            'True' as is_active, cast(null as Nullable(String)) as end_date,
+            'False' as expired, 'UPSERT' as operation, 'False' as is_deleted,
+            '2026-01-01 00:00:00.000000+00:00' as source_updated_at,
+            '2026-01-01 00:00:01.000000+00:00' as time_last_dumped,
+            toUUID('11111111-1111-1111-1111-111111111111') as dump_id,
+            toUUID('22222222-2222-2222-2222-222222222221') as sink_event_id,
+            '2' as schema_version
+
+  - name: test_course_licensing_enrollment_current_resolves_pending_membership
+    description: >
+      int_course_licensing_enrollment_current must include every
+      licensed_enrollment row, plus only the course_enrollment_allowed rows
+      that are both unclaimed (user_id is null) and resolve to a real
+      Course Licensing class via course_id = institution_ccx.ccx_id. Three
+      pending rows are seeded to prove each exclusion reason separately: a
+      claimed invite (user_id is not null), a CCX-shaped course_id that does
+      not match any real institution_ccx (a real scenario — CCX is a
+      generic Open edX feature and can exist without ever going through
+      Course Licensing), and an ordinary non-CCX course invite. Only the
+      fourth pending row, which genuinely resolves, should survive the
+      inner join alongside the one licensed_enrollment row.
+    model: int_course_licensing_enrollment_current
+    given:
+      - input: ref("int_course_licensing_licensed_enrollment_current")
+        format: sql
+        rows: |
+          select
+              '500' as source_id, '500' as id, '1' as institution_id,
+              'Test Institution' as institution_name, '10' as institution_ccx_id,
+              '1' as license_id, 'Test License' as license_name,
+              'active' as license_status, '50' as user_id,
+              'Licensed Student' as student, 'licensed@example.com' as student_email,
+              'Licensed Class' as class_name,
+              'ccx-v1:TEST+LIC+2026+ccx@10' as class_id,
+              'honor' as enrollment_mode, '2026-01-01T00:00:00Z' as enrollment_created,
+              'True' as is_active, '2027-01-01T00:00:00Z' as end_date,
+              'False' as expired, 'UPSERT' as operation, 'False' as is_deleted,
+              '2026-01-01 00:00:00.000000+00:00' as source_updated_at,
+              '2026-01-01 00:00:01.000000+00:00' as time_last_dumped,
+              toUUID('11111111-1111-1111-1111-111111111111') as dump_id,
+              toUUID('22222222-2222-2222-2222-222222222221') as sink_event_id,
+              '2' as schema_version
+      - input: ref("int_course_licensing_institution_ccx_current")
+        format: sql
+        rows: |
+          select
+              '20' as source_id, '20' as id, '1' as institution_id,
+              'Test Institution' as institution_name, '1' as license_id,
+              'Test License' as license_name, 'active' as license_status,
+              'ccx-v1:TEST+PENDING+2026+ccx@20' as ccx_id,
+              'Pending Class' as ccx_name,
+              cast(null as Nullable(String)) as master_course,
+              cast(null as Nullable(String)) as master_course_name,
+              cast(null as Nullable(String)) as custom_course,
+              '5' as min_students_allowed, 'False' as deleted,
+              'UPSERT' as operation, 'False' as is_deleted,
+              '2026-01-01 00:00:00.000000+00:00' as source_updated_at,
+              '2026-01-01 00:00:01.000000+00:00' as time_last_dumped,
+              toUUID('11111111-1111-1111-1111-111111111111') as dump_id,
+              toUUID('22222222-2222-2222-2222-222222222221') as sink_event_id,
+              '2' as schema_version
+      - input: ref("int_course_licensing_course_enrollment_allowed_current")
+        format: sql
+        rows: |
+          select
+              '600' as source_id, '600' as id,
+              'pending-valid@example.com' as email,
+              cast(null as Nullable(String)) as user_id,
+              'ccx-v1:TEST+PENDING+2026+ccx@20' as course_id,
+              'True' as auto_enroll, '2026-01-02T00:00:00Z' as created,
+              'UPSERT' as operation, 'False' as is_deleted,
+              '2026-01-02 00:00:00.000000+00:00' as source_updated_at,
+              '2026-01-02 00:00:01.000000+00:00' as time_last_dumped,
+              toUUID('11111111-1111-1111-1111-111111111111') as dump_id,
+              toUUID('22222222-2222-2222-2222-222222222221') as sink_event_id,
+              '2' as schema_version
+          union all
+          select
+              '601', '601', 'claimed@example.com', '99',
+              'ccx-v1:TEST+PENDING+2026+ccx@20', 'True', '2026-01-02T00:00:00Z',
+              'UPSERT', 'False',
+              '2026-01-02 00:00:00.000000+00:00', '2026-01-02 00:00:01.000000+00:00',
+              toUUID('11111111-1111-1111-1111-111111111112'),
+              toUUID('22222222-2222-2222-2222-222222222222'), '2'
+          union all
+          select
+              '602', '602', 'other-ccx@example.com',
+              cast(null as Nullable(String)),
+              'ccx-v1:OTHER+NOTLICENSED+2026+ccx@99', 'True',
+              '2026-01-02T00:00:00Z', 'UPSERT', 'False',
+              '2026-01-02 00:00:00.000000+00:00', '2026-01-02 00:00:01.000000+00:00',
+              toUUID('11111111-1111-1111-1111-111111111113'),
+              toUUID('22222222-2222-2222-2222-222222222223'), '2'
+          union all
+          select
+              '603', '603', 'regular-course@example.com',
+              cast(null as Nullable(String)),
+              'course-v1:TEST+REGULAR+2026', 'True',
+              '2026-01-02T00:00:00Z', 'UPSERT', 'False',
+              '2026-01-02 00:00:00.000000+00:00', '2026-01-02 00:00:01.000000+00:00',
+              toUUID('11111111-1111-1111-1111-111111111114'),
+              toUUID('22222222-2222-2222-2222-222222222224'), '2'
+    expect:
+      format: sql
+      rows: |
+        select
+            'licensed_enrollment:500' as enrollment_key,
+            'licensed_enrollment' as enrollment_source,
+            '500' as source_id, '1' as institution_id, '10' as institution_ccx_id,
+            '1' as license_id, '50' as user_id, 'licensed@example.com' as learner_email,
+            'ccx-v1:TEST+LIC+2026+ccx@10' as class_id, 'Licensed Class' as class_name,
+            'Active' as enrollment_status, true as consumes_seat,
+            '2026-01-01T00:00:00Z' as created, '2027-01-01T00:00:00Z' as end_date
+        union all
+        select
+            'course_enrollment_allowed:600', 'course_enrollment_allowed',
+            '600', '1', '20', '1', cast(null as Nullable(String)),
+            'pending-valid@example.com', 'ccx-v1:TEST+PENDING+2026+ccx@20',
+            'Pending Class', 'Pending', true, '2026-01-02T00:00:00Z',
+            cast(null as Nullable(String))

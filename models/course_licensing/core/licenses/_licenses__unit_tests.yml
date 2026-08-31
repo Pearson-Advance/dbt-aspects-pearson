@@ -1,0 +1,105 @@
+unit_tests:
+  - name: test_course_licensing_license_current_filters_tombstones
+    description: >
+      The current view keeps the latest active License record and excludes
+      any record whose latest event is a deletion tombstone. Mocks
+      int_course_licensing_license_latest_state directly, since the upstream
+      mv_ layer (argMaxState) cannot be covered by dbt unit tests — see the
+      note on that model. Uses format: sql throughout; dbt-clickhouse 1.9.4
+      on dbt-core 1.9.11 fails with a "get_expected_sql takes not more than
+      2 argument(s)" compiler error on the inline list-of-dicts rows: format,
+      regardless of the target model's own materialization. UUIDs are fixed
+      literals, not generateUUIDv4(), so the expected rows are deterministic
+      and comparable.
+    model: int_course_licensing_license_current
+    given:
+      - input: ref("int_course_licensing_license_latest_state")
+        format: sql
+        rows: |
+          select
+              '1' as source_id, '1' as id, '2026-01-01T00:00:00Z' as created,
+              '2026-01-01T00:00:00Z' as modified, 'Active License' as license_name,
+              '1' as institution_id, 'Active University' as institution_name,
+              '["course-v1:TEST+A+2026"]' as master_courses, '[]' as catalogs,
+              cast(null as Nullable(String)) as course_id,
+              '365' as course_access_duration, 'active' as status,
+              'seat' as license_type, 'UPSERT' as operation, 'False' as is_deleted,
+              '2026-01-01 00:00:00.000000+00:00' as source_updated_at,
+              '2026-01-01 00:00:01.000000+00:00' as time_last_dumped,
+              toUUID('11111111-1111-1111-1111-111111111111') as dump_id,
+              toUUID('22222222-2222-2222-2222-222222222221') as sink_event_id,
+              '2' as schema_version
+          union all
+          select
+              '2', '2', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z',
+              'Deleted License', '1', 'Active University',
+              '["course-v1:TEST+B+2026"]', '[]', cast(null as Nullable(String)),
+              '365', 'expired', 'seat', 'DELETE', 'True',
+              '2026-01-01 01:00:00.000000+00:00',
+              '2026-01-01 01:00:01.000000+00:00',
+              toUUID('11111111-1111-1111-1111-111111111112'),
+              toUUID('22222222-2222-2222-2222-222222222222'),
+              '2'
+    expect:
+      format: sql
+      rows: |
+        select
+            '1' as source_id, '1' as id, '2026-01-01T00:00:00Z' as created,
+            '2026-01-01T00:00:00Z' as modified, 'Active License' as license_name,
+            '1' as institution_id, 'Active University' as institution_name,
+            '["course-v1:TEST+A+2026"]' as master_courses, '[]' as catalogs,
+            cast(null as Nullable(String)) as course_id,
+            '365' as course_access_duration, 'active' as status,
+            'seat' as license_type, 'UPSERT' as operation, 'False' as is_deleted,
+            '2026-01-01 00:00:00.000000+00:00' as source_updated_at,
+            '2026-01-01 00:00:01.000000+00:00' as time_last_dumped,
+            toUUID('11111111-1111-1111-1111-111111111111') as dump_id,
+            toUUID('22222222-2222-2222-2222-222222222221') as sink_event_id,
+            '2' as schema_version
+
+  - name: test_course_licensing_license_order_current_filters_tombstones
+    description: >
+      The current view keeps the latest active LicenseOrder record and
+      excludes any record whose latest event is a deletion tombstone. Mocks
+      int_course_licensing_license_order_latest_state directly, for the same
+      reasons documented on the license unit test above.
+    model: int_course_licensing_license_order_current
+    given:
+      - input: ref("int_course_licensing_license_order_latest_state")
+        format: sql
+        rows: |
+          select
+              '1' as source_id, '1' as id, '2026-01-01T00:00:00Z' as created,
+              '2026-01-01T00:00:00Z' as modified, '1' as license_id,
+              'Active License' as license_name, 'active' as license_status,
+              'ORD-001' as order_reference, '50' as purchased_seats,
+              'True' as active, 'UPSERT' as operation, 'False' as is_deleted,
+              '2026-01-01 00:00:00.000000+00:00' as source_updated_at,
+              '2026-01-01 00:00:01.000000+00:00' as time_last_dumped,
+              toUUID('11111111-1111-1111-1111-111111111111') as dump_id,
+              toUUID('22222222-2222-2222-2222-222222222221') as sink_event_id,
+              '2' as schema_version
+          union all
+          select
+              '2', '2', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', '1',
+              'Active License', 'active', 'ORD-002', '10', 'False',
+              'DELETE', 'True',
+              '2026-01-01 01:00:00.000000+00:00',
+              '2026-01-01 01:00:01.000000+00:00',
+              toUUID('11111111-1111-1111-1111-111111111112'),
+              toUUID('22222222-2222-2222-2222-222222222222'),
+              '2'
+    expect:
+      format: sql
+      rows: |
+        select
+            '1' as source_id, '1' as id, '2026-01-01T00:00:00Z' as created,
+            '2026-01-01T00:00:00Z' as modified, '1' as license_id,
+            'Active License' as license_name, 'active' as license_status,
+            'ORD-001' as order_reference, '50' as purchased_seats,
+            'True' as active, 'UPSERT' as operation, 'False' as is_deleted,
+            '2026-01-01 00:00:00.000000+00:00' as source_updated_at,
+            '2026-01-01 00:00:01.000000+00:00' as time_last_dumped,
+            toUUID('11111111-1111-1111-1111-111111111111') as dump_id,
+            toUUID('22222222-2222-2222-2222-222222222221') as sink_event_id,
+            '2' as schema_version

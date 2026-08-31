@@ -1,0 +1,106 @@
+unit_tests:
+  - name: test_course_licensing_institution_current_filters_tombstones
+    description: >
+      The current view keeps the latest active Institution record and
+      excludes any record whose latest event is a deletion tombstone. Mocks
+      int_course_licensing_institution_latest_state directly, since the
+      upstream mv_ layer (argMaxState) cannot be covered by dbt unit tests —
+      see the note on that model. Uses format: sql throughout; dbt-clickhouse
+      1.9.4 on dbt-core 1.9.11 fails with a "get_expected_sql takes not more
+      than 2 argument(s)" compiler error on the inline list-of-dicts rows:
+      format, regardless of the target model's own materialization. UUIDs
+      are fixed literals, not generateUUIDv4(), so the expected rows are
+      deterministic and comparable.
+    model: int_course_licensing_institution_current
+    given:
+      - input: ref("int_course_licensing_institution_latest_state")
+        format: sql
+        rows: |
+          select
+              '1' as source_id, '1' as id, '2026-01-01T00:00:00Z' as created,
+              '2026-01-01T00:00:00Z' as modified, 'Active University' as name,
+              'ACT-U' as short_name, 'True' as active,
+              '11111111-1111-1111-1111-111111111111' as uuid,
+              'ext-1' as external_id, 'True' as has_bulk_register,
+              'https://example.com/support' as support_link, 'UPSERT' as operation,
+              'False' as is_deleted,
+              '2026-01-01 00:00:00.000000+00:00' as source_updated_at,
+              '2026-01-01 00:00:01.000000+00:00' as time_last_dumped,
+              toUUID('11111111-1111-1111-1111-111111111111') as dump_id,
+              toUUID('22222222-2222-2222-2222-222222222221') as sink_event_id,
+              '2' as schema_version
+          union all
+          select
+              '2', '2', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z',
+              'Deleted University', 'DEL-U', 'False',
+              '33333333-3333-3333-3333-333333333333', 'ext-2', 'True',
+              'https://example.com/support', 'DELETE', 'True',
+              '2026-01-01 01:00:00.000000+00:00',
+              '2026-01-01 01:00:01.000000+00:00',
+              toUUID('11111111-1111-1111-1111-111111111112'),
+              toUUID('22222222-2222-2222-2222-222222222222'),
+              '2'
+    expect:
+      format: sql
+      rows: |
+        select
+            '1' as source_id, '1' as id, '2026-01-01T00:00:00Z' as created,
+            '2026-01-01T00:00:00Z' as modified, 'Active University' as name,
+            'ACT-U' as short_name, 'True' as active,
+            '11111111-1111-1111-1111-111111111111' as uuid,
+            'ext-1' as external_id, 'True' as has_bulk_register,
+            'https://example.com/support' as support_link, 'UPSERT' as operation,
+            'False' as is_deleted,
+            '2026-01-01 00:00:00.000000+00:00' as source_updated_at,
+            '2026-01-01 00:00:01.000000+00:00' as time_last_dumped,
+            toUUID('11111111-1111-1111-1111-111111111111') as dump_id,
+            toUUID('22222222-2222-2222-2222-222222222221') as sink_event_id,
+            '2' as schema_version
+
+  - name: test_course_licensing_institution_administrator_current_filters_tombstones
+    description: >
+      The current view keeps the latest active InstitutionAdministrator
+      record and excludes any record whose latest event is a deletion
+      tombstone. Mocks int_course_licensing_institution_administrator_latest_state
+      directly, for the same reasons documented on the institution unit test
+      above.
+    model: int_course_licensing_institution_administrator_current
+    given:
+      - input: ref("int_course_licensing_institution_administrator_latest_state")
+        format: sql
+        rows: |
+          select
+              '1' as source_id, '1' as id, '2026-01-01T00:00:00Z' as created,
+              '2026-01-01T00:00:00Z' as modified, '1' as institution_id,
+              'Active University' as institution_name, '10' as user_id,
+              'admin_one' as user_name, 'admin.one@example.com' as user_email,
+              'True' as active, 'UPSERT' as operation, 'False' as is_deleted,
+              '2026-01-01 00:00:00.000000+00:00' as source_updated_at,
+              '2026-01-01 00:00:01.000000+00:00' as time_last_dumped,
+              toUUID('11111111-1111-1111-1111-111111111111') as dump_id,
+              toUUID('22222222-2222-2222-2222-222222222221') as sink_event_id,
+              '2' as schema_version
+          union all
+          select
+              '2', '2', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z', '1',
+              'Active University', '20', 'admin_two', 'admin.two@example.com',
+              'False', 'DELETE', 'True',
+              '2026-01-01 01:00:00.000000+00:00',
+              '2026-01-01 01:00:01.000000+00:00',
+              toUUID('11111111-1111-1111-1111-111111111112'),
+              toUUID('22222222-2222-2222-2222-222222222222'),
+              '2'
+    expect:
+      format: sql
+      rows: |
+        select
+            '1' as source_id, '1' as id, '2026-01-01T00:00:00Z' as created,
+            '2026-01-01T00:00:00Z' as modified, '1' as institution_id,
+            'Active University' as institution_name, '10' as user_id,
+            'admin_one' as user_name, 'admin.one@example.com' as user_email,
+            'True' as active, 'UPSERT' as operation, 'False' as is_deleted,
+            '2026-01-01 00:00:00.000000+00:00' as source_updated_at,
+            '2026-01-01 00:00:01.000000+00:00' as time_last_dumped,
+            toUUID('11111111-1111-1111-1111-111111111111') as dump_id,
+            toUUID('22222222-2222-2222-2222-222222222221') as sink_event_id,
+            '2' as schema_version
