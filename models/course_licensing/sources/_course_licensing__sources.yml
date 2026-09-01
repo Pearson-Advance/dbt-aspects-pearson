@@ -191,3 +191,113 @@ sources:
           - name: dump_id
           - name: sink_event_id
           - name: schema_version
+
+      - name: course_licensing_course
+        description: >
+          Append-only history of Course events. One row per UPSERT or DELETE
+          event; the current record per source_id must be resolved downstream.
+        loaded_at_field: time_last_dumped
+        columns:
+          - name: source_id
+          - name: master_course_id
+          - name: master_course_name
+          - name: operation
+          - name: is_deleted
+          - name: source_updated_at
+          - name: time_last_dumped
+          - name: dump_id
+          - name: sink_event_id
+          - name: schema_version
+
+      - name: course_licensing_other_course_settings_cache
+        description: >
+          Append-only history of OtherCourseSettingsCache events. One row per
+          UPSERT or DELETE event; the current record per source_id must be
+          resolved downstream.
+        loaded_at_field: time_last_dumped
+        columns:
+          - name: source_id
+          - name: created
+          - name: modified
+          - name: master_course_id
+          - name: settings
+          - name: operation
+          - name: is_deleted
+          - name: source_updated_at
+          - name: time_last_dumped
+          - name: dump_id
+          - name: sink_event_id
+          - name: schema_version
+
+      - name: course_licensing_instructor
+        description: >
+          Append-only history of Instructor events. One row per UPSERT or
+          DELETE event; the current record per source_id must be resolved
+          downstream.
+        loaded_at_field: time_last_dumped
+        columns:
+          - name: source_id
+          - name: created
+          - name: modified
+          - name: user_id
+          - name: username
+          - name: email
+          - name: first_name
+          - name: last_name
+          - name: user_is_active
+          - name: operation
+          - name: is_deleted
+          - name: source_updated_at
+          - name: time_last_dumped
+          - name: dump_id
+          - name: sink_event_id
+          - name: schema_version
+
+      - name: course_licensing_instructor_institution
+        description: >
+          Append-only history of InstructorInstitution events. One row per
+          UPSERT or DELETE event; the current record per source_id must be
+          resolved downstream.
+        loaded_at_field: time_last_dumped
+        columns:
+          - name: source_id
+          - name: instructor_id
+          - name: user_id
+          - name: username
+          - name: user_email
+          - name: institution_id
+          - name: institution_name
+          - name: has_enrollment_privilege
+          - name: active
+          - name: operation
+          - name: is_deleted
+          - name: source_updated_at
+          - name: time_last_dumped
+          - name: dump_id
+          - name: sink_event_id
+          - name: schema_version
+
+      - name: course_licensing_instructor_class
+        description: >
+          Append-only history of InstructorClass events. One row per UPSERT or
+          DELETE event; the current record per source_id must be resolved
+          downstream.
+        loaded_at_field: time_last_dumped
+        columns:
+          - name: source_id
+          - name: instructor_id
+          - name: user_id
+          - name: username
+          - name: user_email
+          - name: institution_ccx_id
+          - name: institution_id
+          - name: license_id
+          - name: class_id
+          - name: master_course_id
+          - name: operation
+          - name: is_deleted
+          - name: source_updated_at
+          - name: time_last_dumped
+          - name: dump_id
+          - name: sink_event_id
+          - name: schema_version

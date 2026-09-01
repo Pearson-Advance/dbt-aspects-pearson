@@ -1,0 +1,199 @@
+version: 2
+models:
+- name: mv_course_licensing_instructor_latest_state
+  description: >-
+    Incrementally maintained argMax aggregate state, one row per source_id, tracking the most recent Instructor
+    sink event.
+  columns:
+  - name: source_id
+    description: Raw Django primary key of the source Instructor row.
+    data_tests:
+    - not_null
+  - name: latest_state
+    description: Opaque argMaxState aggregate finalized by the corresponding latest-state view.
+- name: int_course_licensing_instructor_latest_state
+  description: One finalized latest UPSERT or DELETE event per Instructor source_id.
+  columns:
+  - name: source_id
+    description: Raw Django primary key of the source Instructor row.
+    data_tests:
+    - unique
+    - not_null
+  - name: is_deleted
+    description: Sink tombstone flag stored as 'True'/'False'.
+    data_tests:
+    - accepted_values:
+        values:
+        - 'True'
+        - 'False'
+  - name: time_last_dumped
+    description: When this event was written to ClickHouse.
+  - name: sink_event_id
+    description: Final deterministic tie-breaker for the latest-event ordering.
+- name: int_course_licensing_instructor_current
+  description: Current non-deleted representation of Instructor, one row per source_id.
+  data_tests:
+  - course_licensing_current_matches_latest_event:
+      source_name: course_licensing_event_sink
+      source_table: course_licensing_instructor
+  columns:
+  - name: source_id
+    description: Raw Django primary key of the source Instructor row.
+    data_tests:
+    - unique
+    - not_null
+  - name: user_id
+    description: Open edX user identifier represented by the instructor.
+    data_tests:
+    - not_null
+  - name: is_deleted
+    description: Always 'False' in the current model.
+    data_tests:
+    - accepted_values:
+        values:
+        - 'False'
+- name: mv_course_licensing_instructor_institution_latest_state
+  description: >-
+    Incrementally maintained argMax aggregate state, one row per source_id, tracking the most recent Instructor
+    Institution sink event.
+  columns:
+  - name: source_id
+    description: Raw Django primary key of the source Instructor Institution row.
+    data_tests:
+    - not_null
+  - name: latest_state
+    description: Opaque argMaxState aggregate finalized by the corresponding latest-state view.
+- name: int_course_licensing_instructor_institution_latest_state
+  description: One finalized latest UPSERT or DELETE event per Instructor Institution source_id.
+  columns:
+  - name: source_id
+    description: Raw Django primary key of the source Instructor Institution row.
+    data_tests:
+    - unique
+    - not_null
+  - name: is_deleted
+    description: Sink tombstone flag stored as 'True'/'False'.
+    data_tests:
+    - accepted_values:
+        values:
+        - 'True'
+        - 'False'
+  - name: time_last_dumped
+    description: When this event was written to ClickHouse.
+  - name: sink_event_id
+    description: Final deterministic tie-breaker for the latest-event ordering.
+- name: int_course_licensing_instructor_institution_current
+  description: Current non-deleted representation of Instructor Institution, one row per source_id.
+  data_tests:
+  - course_licensing_current_matches_latest_event:
+      source_name: course_licensing_event_sink
+      source_table: course_licensing_instructor_institution
+  columns:
+  - name: source_id
+    description: Raw Django primary key of the source Instructor Institution row.
+    data_tests:
+    - unique
+    - not_null
+  - name: instructor_id
+    description: Related Instructor source_id.
+    data_tests:
+    - not_null
+    - relationships:
+        to: ref('int_course_licensing_instructor_current')
+        field: source_id
+  - name: institution_id
+    description: Related Institution source_id.
+    data_tests:
+    - not_null
+    - relationships:
+        to: ref('int_course_licensing_institution_current')
+        field: source_id
+  - name: has_enrollment_privilege
+    description: Whether the assignment grants enrollment-management privileges.
+  - name: is_deleted
+    description: Always 'False' in the current model.
+    data_tests:
+    - accepted_values:
+        values:
+        - 'False'
+- name: mv_course_licensing_instructor_class_latest_state
+  description: >-
+    Incrementally maintained argMax aggregate state, one row per source_id, tracking the most recent Instructor
+    Class sink event.
+  columns:
+  - name: source_id
+    description: Raw Django primary key of the source Instructor Class row.
+    data_tests:
+    - not_null
+  - name: latest_state
+    description: Opaque argMaxState aggregate finalized by the corresponding latest-state view.
+- name: int_course_licensing_instructor_class_latest_state
+  description: One finalized latest UPSERT or DELETE event per Instructor Class source_id.
+  columns:
+  - name: source_id
+    description: Raw Django primary key of the source Instructor Class row.
+    data_tests:
+    - unique
+    - not_null
+  - name: is_deleted
+    description: Sink tombstone flag stored as 'True'/'False'.
+    data_tests:
+    - accepted_values:
+        values:
+        - 'True'
+        - 'False'
+  - name: time_last_dumped
+    description: When this event was written to ClickHouse.
+  - name: sink_event_id
+    description: Final deterministic tie-breaker for the latest-event ordering.
+- name: int_course_licensing_instructor_class_current
+  description: Current non-deleted representation of Instructor Class, one row per source_id.
+  data_tests:
+  - course_licensing_current_matches_latest_event:
+      source_name: course_licensing_event_sink
+      source_table: course_licensing_instructor_class
+  columns:
+  - name: source_id
+    description: Raw Django primary key of the source Instructor Class row.
+    data_tests:
+    - unique
+    - not_null
+  - name: instructor_id
+    description: Instructor source_id.
+    data_tests:
+    - not_null
+    - relationships:
+        to: ref('int_course_licensing_instructor_current')
+        field: source_id
+  - name: institution_ccx_id
+    description: InstitutionCCX source_id.
+    data_tests:
+    - not_null
+    - relationships:
+        to: ref('int_course_licensing_institution_ccx_current')
+        field: source_id
+  - name: institution_id
+    description: Institution source_id.
+    data_tests:
+    - not_null
+    - relationships:
+        to: ref('int_course_licensing_institution_current')
+        field: source_id
+  - name: license_id
+    description: Nullable License source_id inherited from the assigned InstitutionCCX.
+    data_tests:
+    - relationships:
+        to: ref('int_course_licensing_license_current')
+        field: source_id
+  - name: master_course_id
+    description: Nullable Open edX master course key inherited from the assigned InstitutionCCX.
+    data_tests:
+    - relationships:
+        to: ref('int_course_licensing_course_current')
+        field: master_course_id
+  - name: is_deleted
+    description: Always 'False' in the current model.
+    data_tests:
+    - accepted_values:
+        values:
+        - 'False'

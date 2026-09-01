@@ -194,3 +194,114 @@
         )
     }}
 {% endmacro %}
+
+{% macro course_licensing_course_columns() %}
+    {{
+        return(
+            [
+                "master_course_id",
+                "master_course_name",
+                "operation",
+                "is_deleted",
+                "source_updated_at",
+                "time_last_dumped",
+                "dump_id",
+                "sink_event_id",
+                "schema_version",
+            ]
+        )
+    }}
+{% endmacro %}
+
+{% macro course_licensing_other_course_settings_cache_columns() %}
+    {{
+        return(
+            [
+                "created",
+                "modified",
+                "master_course_id",
+                "settings",
+                "operation",
+                "is_deleted",
+                "source_updated_at",
+                "time_last_dumped",
+                "dump_id",
+                "sink_event_id",
+                "schema_version",
+            ]
+        )
+    }}
+{% endmacro %}
+
+{% macro course_licensing_instructor_columns() %}
+    {{
+        return(
+            [
+                "created",
+                "modified",
+                "user_id",
+                "username",
+                "email",
+                "first_name",
+                "last_name",
+                "user_is_active",
+                "operation",
+                "is_deleted",
+                "source_updated_at",
+                "time_last_dumped",
+                "dump_id",
+                "sink_event_id",
+                "schema_version",
+            ]
+        )
+    }}
+{% endmacro %}
+
+{% macro course_licensing_instructor_institution_columns() %}
+    {{
+        return(
+            [
+                "instructor_id",
+                "user_id",
+                "username",
+                "user_email",
+                "institution_id",
+                "institution_name",
+                "has_enrollment_privilege",
+                "active",
+                "operation",
+                "is_deleted",
+                "source_updated_at",
+                "time_last_dumped",
+                "dump_id",
+                "sink_event_id",
+                "schema_version",
+            ]
+        )
+    }}
+{% endmacro %}
+
+{% macro course_licensing_instructor_class_columns() %}
+    {{
+        return(
+            [
+                "instructor_id",
+                "user_id",
+                "username",
+                "user_email",
+                "institution_ccx_id",
+                "institution_id",
+                "license_id",
+                "class_id",
+                "master_course_id",
+                "operation",
+                "is_deleted",
+                "source_updated_at",
+                "time_last_dumped",
+                "dump_id",
+                "sink_event_id",
+                "schema_version",
+            ]
+        )
+    }}
+{% endmacro %}

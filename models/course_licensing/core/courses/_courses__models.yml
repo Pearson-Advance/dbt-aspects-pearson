@@ -1,0 +1,120 @@
+version: 2
+models:
+- name: mv_course_licensing_course_latest_state
+  description: >-
+    Incrementally maintained argMax aggregate state, one row per source_id, tracking the most recent Course
+    sink event.
+  columns:
+  - name: source_id
+    description: Raw Django primary key of the source Course row.
+    data_tests:
+    - not_null
+  - name: latest_state
+    description: Opaque argMaxState aggregate finalized by the corresponding latest-state view.
+- name: int_course_licensing_course_latest_state
+  description: One finalized latest UPSERT or DELETE event per Course source_id.
+  columns:
+  - name: source_id
+    description: Raw Django primary key of the source Course row.
+    data_tests:
+    - unique
+    - not_null
+  - name: is_deleted
+    description: Sink tombstone flag stored as 'True'/'False'.
+    data_tests:
+    - accepted_values:
+        values:
+        - 'True'
+        - 'False'
+  - name: time_last_dumped
+    description: When this event was written to ClickHouse.
+  - name: sink_event_id
+    description: Final deterministic tie-breaker for the latest-event ordering.
+- name: int_course_licensing_course_current
+  description: Current non-deleted representation of Course, one row per source_id.
+  data_tests:
+  - course_licensing_current_matches_latest_event:
+      source_name: course_licensing_event_sink
+      source_table: course_licensing_course
+  columns:
+  - name: source_id
+    description: Raw Django primary key of the source Course row.
+    data_tests:
+    - unique
+    - not_null
+  - name: master_course_id
+    description: Stable Open edX master course key.
+    data_tests:
+    - not_null
+  - name: is_deleted
+    description: Always 'False' in the current model.
+    data_tests:
+    - accepted_values:
+        values:
+        - 'False'
+- name: mv_course_licensing_other_course_settings_cache_latest_state
+  description: >-
+    Incrementally maintained argMax aggregate state, one row per source_id, tracking the most recent Other
+    Course Settings Cache sink event.
+  columns:
+  - name: source_id
+    description: Raw Django primary key of the source Other Course Settings Cache row.
+    data_tests:
+    - not_null
+  - name: latest_state
+    description: Opaque argMaxState aggregate finalized by the corresponding latest-state view.
+- name: int_course_licensing_other_course_settings_cache_latest_state
+  description: One finalized latest UPSERT or DELETE event per Other Course Settings Cache source_id.
+  columns:
+  - name: source_id
+    description: Raw Django primary key of the source Other Course Settings Cache row.
+    data_tests:
+    - unique
+    - not_null
+  - name: is_deleted
+    description: Sink tombstone flag stored as 'True'/'False'.
+    data_tests:
+    - accepted_values:
+        values:
+        - 'True'
+        - 'False'
+  - name: time_last_dumped
+    description: When this event was written to ClickHouse.
+  - name: sink_event_id
+    description: Final deterministic tie-breaker for the latest-event ordering.
+- name: int_course_licensing_other_course_settings_cache_current
+  description: >-
+    Current non-deleted representation of Other Course Settings Cache, one row per source_id.
+  data_tests:
+  - course_licensing_current_matches_latest_event:
+      source_name: course_licensing_event_sink
+      source_table: course_licensing_other_course_settings_cache
+  columns:
+  - name: source_id
+    description: Raw Django primary key of the source Other Course Settings Cache row.
+    data_tests:
+    - unique
+    - not_null
+  - name: master_course_id
+    description: Master course key associated with the settings cache.
+    data_tests:
+    - not_null
+    - relationships:
+        to: ref('int_course_licensing_course_current')
+        field: master_course_id
+  - name: settings
+    description: >-
+      Canonical JSON with restricted operational course settings. Not intended for general Superset datasets.
+    data_tests:
+    - course_licensing_valid_json:
+        config:
+          tags:
+          - course_licensing
+          - course_licensing_courses
+          - course_licensing_courses_instructors
+  - name: is_deleted
+    description: Always 'False' in the current model.
+    data_tests:
+    - accepted_values:
+        values:
+        - 'False'
