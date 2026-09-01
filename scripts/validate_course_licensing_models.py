@@ -47,6 +47,11 @@ ENTITY_AREAS = {
     "institution_ccx": "classes",
     "licensed_enrollment": "enrollments",
     "course_enrollment_allowed": "enrollments",
+    "course": "courses",
+    "other_course_settings_cache": "courses",
+    "instructor": "instructor_assignments",
+    "instructor_institution": "instructor_assignments",
+    "instructor_class": "instructor_assignments",
 }
 
 # One models/unit-tests YAML pair per functional area (not per entity, since
@@ -56,12 +61,16 @@ MODEL_YAML_FILES = [
     CORE_ROOT / "licenses/_licenses__models.yml",
     CORE_ROOT / "classes/_classes__models.yml",
     CORE_ROOT / "enrollments/_enrollments__models.yml",
+    CORE_ROOT / "courses/_courses__models.yml",
+    CORE_ROOT / "instructor_assignments/_instructor_assignments__models.yml",
 ]
 UNIT_TEST_YAML_FILES = [
     CORE_ROOT / "institutions/_institutions__unit_tests.yml",
     CORE_ROOT / "licenses/_licenses__unit_tests.yml",
     CORE_ROOT / "classes/_classes__unit_tests.yml",
     CORE_ROOT / "enrollments/_enrollments__unit_tests.yml",
+    CORE_ROOT / "courses/_courses__unit_tests.yml",
+    CORE_ROOT / "instructor_assignments/_instructor_assignments__unit_tests.yml",
 ]
 
 # Business-level models that combine more than one entity and therefore

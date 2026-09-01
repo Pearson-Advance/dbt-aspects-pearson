@@ -1,0 +1,103 @@
+unit_tests:
+- name: test_course_licensing_instructor_current_filters_tombstones
+  description: The current view keeps active instructor rows and excludes tombstones.
+  model: int_course_licensing_instructor_current
+  given:
+  - input: ref("int_course_licensing_instructor_latest_state")
+    format: sql
+    rows: >-
+      select 1 as source_id, '2026-01-01T00:00:00Z' as created, '2026-01-01T00:00:00Z' as modified,
+          '1' as user_id, 'username_1' as username, 'user1@example.com' as email,
+          'first_name_1' as first_name, 'last_name_1' as last_name, 'True' as user_is_active,
+          'UPSERT' as operation, 'False' as is_deleted,
+          '2026-01-01 00:00:00.000000+00:00' as source_updated_at,
+          '2026-01-01 00:00:01.000000+00:00' as time_last_dumped,
+          toUUID('11111111-1111-1111-1111-000000000001') as dump_id,
+          toUUID('22222222-2222-2222-2222-000000000001') as sink_event_id, '2' as schema_version
+      union all
+
+      select 2 as source_id, '2026-01-01T00:00:00Z' as created, '2026-01-01T00:00:00Z' as modified,
+          '2' as user_id, 'username_2' as username, 'user2@example.com' as email,
+          'first_name_2' as first_name, 'last_name_2' as last_name, 'False' as user_is_active,
+          'DELETE' as operation, 'True' as is_deleted,
+          '2026-01-01 00:00:01.000000+00:00' as source_updated_at,
+          '2026-01-01 00:00:02.000000+00:00' as time_last_dumped,
+          toUUID('11111111-1111-1111-1111-000000000002') as dump_id,
+          toUUID('22222222-2222-2222-2222-000000000002') as sink_event_id, '2' as schema_version
+  expect:
+    format: sql
+    rows: >-
+      select 1 as source_id, '2026-01-01T00:00:00Z' as created, '2026-01-01T00:00:00Z' as modified,
+          '1' as user_id, 'username_1' as username, 'user1@example.com' as email,
+          'first_name_1' as first_name, 'last_name_1' as last_name, 'True' as user_is_active,
+          'UPSERT' as operation, 'False' as is_deleted,
+          '2026-01-01 00:00:00.000000+00:00' as source_updated_at,
+          '2026-01-01 00:00:01.000000+00:00' as time_last_dumped,
+          toUUID('11111111-1111-1111-1111-000000000001') as dump_id,
+          toUUID('22222222-2222-2222-2222-000000000001') as sink_event_id, '2' as schema_version
+- name: test_course_licensing_instructor_institution_current_filters_tombstones
+  description: The current view keeps active instructor_institution rows and excludes tombstones.
+  model: int_course_licensing_instructor_institution_current
+  given:
+  - input: ref("int_course_licensing_instructor_institution_latest_state")
+    format: sql
+    rows: >-
+      select 1 as source_id, '1' as instructor_id, '1' as user_id, 'username_1' as username,
+          'user1@example.com' as user_email, '1' as institution_id, 'institution_name_1' as institution_name,
+          'True' as has_enrollment_privilege, 'True' as active, 'UPSERT' as operation, 'False' as is_deleted,
+          '2026-01-01 00:00:00.000000+00:00' as source_updated_at,
+          '2026-01-01 00:00:01.000000+00:00' as time_last_dumped,
+          toUUID('11111111-1111-1111-1111-000000000001') as dump_id,
+          toUUID('22222222-2222-2222-2222-000000000001') as sink_event_id, '2' as schema_version
+      union all
+
+      select 2 as source_id, '2' as instructor_id, '2' as user_id, 'username_2' as username,
+          'user2@example.com' as user_email, '2' as institution_id, 'institution_name_2' as institution_name,
+          'False' as has_enrollment_privilege, 'False' as active, 'DELETE' as operation, 'True' as is_deleted,
+          '2026-01-01 00:00:01.000000+00:00' as source_updated_at,
+          '2026-01-01 00:00:02.000000+00:00' as time_last_dumped,
+          toUUID('11111111-1111-1111-1111-000000000002') as dump_id,
+          toUUID('22222222-2222-2222-2222-000000000002') as sink_event_id, '2' as schema_version
+  expect:
+    format: sql
+    rows: >-
+      select 1 as source_id, '1' as instructor_id, '1' as user_id, 'username_1' as username,
+          'user1@example.com' as user_email, '1' as institution_id, 'institution_name_1' as institution_name,
+          'True' as has_enrollment_privilege, 'True' as active, 'UPSERT' as operation, 'False' as is_deleted,
+          '2026-01-01 00:00:00.000000+00:00' as source_updated_at,
+          '2026-01-01 00:00:01.000000+00:00' as time_last_dumped,
+          toUUID('11111111-1111-1111-1111-000000000001') as dump_id,
+          toUUID('22222222-2222-2222-2222-000000000001') as sink_event_id, '2' as schema_version
+- name: test_course_licensing_instructor_class_current_filters_tombstones
+  description: The current view keeps active instructor_class rows and excludes tombstones.
+  model: int_course_licensing_instructor_class_current
+  given:
+  - input: ref("int_course_licensing_instructor_class_latest_state")
+    format: sql
+    rows: >-
+      select 1 as source_id, '1' as instructor_id, '1' as user_id, 'username_1' as username,
+          'user1@example.com' as user_email, '1' as institution_ccx_id, '1' as institution_id,
+          '1' as license_id, '1' as class_id, '1' as master_course_id, 'UPSERT' as operation,
+          'False' as is_deleted, '2026-01-01 00:00:00.000000+00:00' as source_updated_at,
+          '2026-01-01 00:00:01.000000+00:00' as time_last_dumped,
+          toUUID('11111111-1111-1111-1111-000000000001') as dump_id,
+          toUUID('22222222-2222-2222-2222-000000000001') as sink_event_id, '2' as schema_version
+      union all
+
+      select 2 as source_id, '2' as instructor_id, '2' as user_id, 'username_2' as username,
+          'user2@example.com' as user_email, '2' as institution_ccx_id, '2' as institution_id,
+          '2' as license_id, '2' as class_id, '2' as master_course_id, 'DELETE' as operation,
+          'True' as is_deleted, '2026-01-01 00:00:01.000000+00:00' as source_updated_at,
+          '2026-01-01 00:00:02.000000+00:00' as time_last_dumped,
+          toUUID('11111111-1111-1111-1111-000000000002') as dump_id,
+          toUUID('22222222-2222-2222-2222-000000000002') as sink_event_id, '2' as schema_version
+  expect:
+    format: sql
+    rows: >-
+      select 1 as source_id, '1' as instructor_id, '1' as user_id, 'username_1' as username,
+          'user1@example.com' as user_email, '1' as institution_ccx_id, '1' as institution_id,
+          '1' as license_id, '1' as class_id, '1' as master_course_id, 'UPSERT' as operation,
+          'False' as is_deleted, '2026-01-01 00:00:00.000000+00:00' as source_updated_at,
+          '2026-01-01 00:00:01.000000+00:00' as time_last_dumped,
+          toUUID('11111111-1111-1111-1111-000000000001') as dump_id,
+          toUUID('22222222-2222-2222-2222-000000000001') as sink_event_id, '2' as schema_version
