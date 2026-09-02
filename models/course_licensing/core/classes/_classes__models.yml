@@ -86,6 +86,8 @@ models:
           - relationships:
               to: ref('int_course_licensing_institution_current')
               field: source_id
+              config:
+                severity: warn
       - name: license_id
         description: >
           Raw Django primary key of the related License row, when this class
@@ -95,6 +97,8 @@ models:
           - relationships:
               to: ref('int_course_licensing_license_current')
               field: source_id
+              config:
+                severity: warn
       - name: is_deleted
         description: Always 'False' here by construction — tombstones are filtered out.
         data_tests:

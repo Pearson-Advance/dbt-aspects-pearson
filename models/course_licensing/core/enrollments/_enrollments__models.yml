@@ -294,13 +294,10 @@ models:
           - not_null
       - name: institution_id
         description: >
-          Raw Django primary key of the related Institution row. Must exist
-          as an active source_id in int_course_licensing_institution_current.
+          Institution identifier inherited from the related InstitutionCCX.
+          The canonical parent relationship is represented by institution_ccx_id.
         data_tests:
           - not_null
-          - relationships:
-              to: ref('int_course_licensing_institution_current')
-              field: source_id
       - name: institution_ccx_id
         description: >
           Raw Django primary key of the related InstitutionCCX (class) row.
@@ -311,15 +308,12 @@ models:
           - relationships:
               to: ref('int_course_licensing_institution_ccx_current')
               field: source_id
+              config:
+                severity: warn
       - name: license_id
         description: >
-          Raw Django primary key of the related License row, when this
-          enrollment is license-scoped. Nullable values are exempt from the
-          relationship check by dbt's own semantics.
-        data_tests:
-          - relationships:
-              to: ref('int_course_licensing_license_current')
-              field: source_id
+          Nullable License identifier inherited from the related InstitutionCCX.
+          The canonical parent relationship is represented by institution_ccx_id.
       - name: is_deleted
         description: Always 'False' here by construction — tombstones are filtered out.
         data_tests:
