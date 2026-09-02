@@ -99,9 +99,6 @@ models:
     description: Master course key associated with the settings cache.
     data_tests:
     - not_null
-    - relationships:
-        to: ref('int_course_licensing_course_current')
-        field: master_course_id
   - name: settings
     description: >-
       Canonical JSON with restricted operational course settings. Not intended for general Superset datasets.

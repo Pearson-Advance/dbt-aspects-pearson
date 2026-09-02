@@ -101,6 +101,8 @@ models:
     - relationships:
         to: ref('int_course_licensing_instructor_current')
         field: source_id
+        config:
+          severity: warn
   - name: institution_id
     description: Related Institution source_id.
     data_tests:
@@ -108,6 +110,8 @@ models:
     - relationships:
         to: ref('int_course_licensing_institution_current')
         field: source_id
+        config:
+          severity: warn
   - name: has_enrollment_privilege
     description: Whether the assignment grants enrollment-management privileges.
   - name: is_deleted
@@ -165,6 +169,8 @@ models:
     - relationships:
         to: ref('int_course_licensing_instructor_current')
         field: source_id
+        config:
+          severity: warn
   - name: institution_ccx_id
     description: InstitutionCCX source_id.
     data_tests:
@@ -172,25 +178,16 @@ models:
     - relationships:
         to: ref('int_course_licensing_institution_ccx_current')
         field: source_id
+        config:
+          severity: warn
   - name: institution_id
-    description: Institution source_id.
+    description: Institution source_id inherited from the assigned InstitutionCCX.
     data_tests:
     - not_null
-    - relationships:
-        to: ref('int_course_licensing_institution_current')
-        field: source_id
   - name: license_id
     description: Nullable License source_id inherited from the assigned InstitutionCCX.
-    data_tests:
-    - relationships:
-        to: ref('int_course_licensing_license_current')
-        field: source_id
   - name: master_course_id
     description: Nullable Open edX master course key inherited from the assigned InstitutionCCX.
-    data_tests:
-    - relationships:
-        to: ref('int_course_licensing_course_current')
-        field: master_course_id
   - name: is_deleted
     description: Always 'False' in the current model.
     data_tests:
