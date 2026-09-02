@@ -1,0 +1,411 @@
+version: 2
+
+models:
+  - name: mv_measureup_exam_test_latest_state
+    description: >
+      Incrementally-maintained argMax aggregate state, one row per source_id,
+      tracking the most recent event recorded for each ExamTest record.
+      Backed by an AggregatingMergeTree materialized view, so new raw events
+      are absorbed automatically as they arrive — no dbt run required to
+      stay current.
+
+
+      Not covered by dbt unit tests: the latest_state column is a ClickHouse
+      AggregateFunction, and ClickHouse does not support deserializing that
+      type for dbt's expected-vs-actual comparison. Deduplication behavior
+      for this model is validated with a real-ClickHouse integration check
+      instead of dbt's native unit_tests mechanism.
+    columns:
+      - name: source_id
+        description: Raw Django primary key of the source ExamTest row.
+        data_tests:
+          - not_null
+      - name: latest_state
+        description: >
+          Opaque argMaxState(...) aggregate holding every value column for
+          the most recent event of this source_id. Read it only through
+          int_measureup_exam_test_latest_state, which resolves it into
+          plain columns with argMaxMerge.
+
+  - name: int_measureup_exam_test_latest_state
+    description: >
+      One row per source_id, resolved from
+      mv_measureup_exam_test_latest_state into plain columns — the most
+      recent UPSERT or DELETE event recorded for each ExamTest record,
+      regardless of whether that record is currently deleted.
+    columns:
+      - name: source_id
+        description: Raw Django primary key of the source ExamTest row.
+        data_tests:
+          - unique
+          - not_null
+      - name: name
+        description: Test display name.
+        data_tests:
+          - not_null
+      - name: product_id
+        description: >
+          MeasureUp catalog product identifier. Not a stable business key
+          on its own — ExamTest enforces uniqueness on
+          (product_id, name, exam_last_updated), so different versions of
+          the same product/name pair are distinct source_id rows and must
+          stay distinguishable.
+      - name: exam_last_updated
+        description: >
+          Source-side last-updated timestamp maintained by ExamTest itself.
+          ExamDomain, ExamSubDomain and Question inherit this same value as
+          their own source_updated_at (verified in
+          aspects_plugin/sinks/measure_up/serializers.py) — it does not
+          change per child record.
+      - name: is_deleted
+        description: >
+          Sink tombstone flag for this event. Stored as the sink's own
+          'True'/'False' string values.
+        data_tests:
+          - accepted_values:
+              values: ["True", "False"]
+      - name: time_last_dumped
+        description: When this event was written to ClickHouse.
+      - name: sink_event_id
+        description: >
+          Unique identifier for this specific sink event; the final
+          tie-breaker in the latest-state ordering when every other field
+          in the tuple matches.
+
+  - name: int_measureup_exam_test_current
+    description: >
+      Current-state view of ExamTest records: exactly one row per source_id
+      whose most recent event was not a DELETE. This is the model
+      reporting and dashboards should query — never the raw event_sink
+      table directly. It is also the root of the MeasureUp test catalog
+      hierarchy: exam_domain, exam_subdomain and question current views all
+      resolve back to this one via their *_id columns.
+    data_tests:
+      - measureup_current_matches_latest_event:
+          source_name: measureup_event_sink
+          source_table: measureup_exam_test
+    columns:
+      - name: source_id
+        description: Raw Django primary key of the source ExamTest row.
+        data_tests:
+          - unique
+          - not_null
+      - name: name
+        description: Test display name.
+        data_tests:
+          - not_null
+      - name: is_deleted
+        description: Always 'False' here by construction — tombstones are filtered out.
+        data_tests:
+          - accepted_values:
+              values: ["False"]
+
+  - name: mv_measureup_exam_domain_latest_state
+    description: >
+      Incrementally-maintained argMax aggregate state, one row per source_id,
+      tracking the most recent event recorded for each ExamDomain record.
+      Backed by an AggregatingMergeTree materialized view, so new raw events
+      are absorbed automatically as they arrive — no dbt run required to
+      stay current.
+
+
+      Not covered by dbt unit tests: the latest_state column is a ClickHouse
+      AggregateFunction, and ClickHouse does not support deserializing that
+      type for dbt's expected-vs-actual comparison. Deduplication behavior
+      for this model is validated with a real-ClickHouse integration check
+      instead of dbt's native unit_tests mechanism.
+    columns:
+      - name: source_id
+        description: Raw Django primary key of the source ExamDomain row.
+        data_tests:
+          - not_null
+      - name: latest_state
+        description: >
+          Opaque argMaxState(...) aggregate holding every value column for
+          the most recent event of this source_id. Read it only through
+          int_measureup_exam_domain_latest_state, which resolves it into
+          plain columns with argMaxMerge.
+
+  - name: int_measureup_exam_domain_latest_state
+    description: >
+      One row per source_id, resolved from
+      mv_measureup_exam_domain_latest_state into plain columns — the most
+      recent UPSERT or DELETE event recorded for each ExamDomain record,
+      regardless of whether that record is currently deleted.
+    columns:
+      - name: source_id
+        description: Raw Django primary key of the source ExamDomain row.
+        data_tests:
+          - unique
+          - not_null
+      - name: exam_test_id
+        description: Raw Django primary key of the parent ExamTest row.
+        data_tests:
+          - not_null
+      - name: name
+        description: Domain display name.
+        data_tests:
+          - not_null
+      - name: is_deleted
+        description: >
+          Sink tombstone flag for this event. Stored as the sink's own
+          'True'/'False' string values.
+        data_tests:
+          - accepted_values:
+              values: ["True", "False"]
+      - name: time_last_dumped
+        description: When this event was written to ClickHouse.
+      - name: sink_event_id
+        description: >
+          Unique identifier for this specific sink event; the final
+          tie-breaker in the latest-state ordering when every other field
+          in the tuple matches.
+
+  - name: int_measureup_exam_domain_current
+    description: >
+      Current-state view of ExamDomain records: exactly one row per
+      source_id whose most recent event was not a DELETE. This is the
+      model reporting and dashboards should query — never the raw
+      event_sink table directly.
+    data_tests:
+      - measureup_current_matches_latest_event:
+          source_name: measureup_event_sink
+          source_table: measureup_exam_domain
+    columns:
+      - name: source_id
+        description: Raw Django primary key of the source ExamDomain row.
+        data_tests:
+          - unique
+          - not_null
+      - name: exam_test_id
+        description: >
+          Raw Django primary key of the parent ExamTest row. The Django
+          relation is on_delete=CASCADE (verified in
+          measureup_plugin/models.py), so a normal delete cannot orphan
+          this row — severity is warn rather than a hard failure because a
+          migration or raw-SQL operation that bypasses Django's ORM could
+          still do so (the same real scenario confirmed in
+          course_licensing's PR #11 relationship-test incident).
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('int_measureup_exam_test_current')
+              field: source_id
+              config:
+                severity: warn
+      - name: is_deleted
+        description: Always 'False' here by construction — tombstones are filtered out.
+        data_tests:
+          - accepted_values:
+              values: ["False"]
+
+  - name: mv_measureup_exam_subdomain_latest_state
+    description: >
+      Incrementally-maintained argMax aggregate state, one row per source_id,
+      tracking the most recent event recorded for each ExamSubDomain
+      record. Backed by an AggregatingMergeTree materialized view, so new
+      raw events are absorbed automatically as they arrive — no dbt run
+      required to stay current.
+
+
+      Not covered by dbt unit tests: the latest_state column is a ClickHouse
+      AggregateFunction, and ClickHouse does not support deserializing that
+      type for dbt's expected-vs-actual comparison. Deduplication behavior
+      for this model is validated with a real-ClickHouse integration check
+      instead of dbt's native unit_tests mechanism.
+    columns:
+      - name: source_id
+        description: Raw Django primary key of the source ExamSubDomain row.
+        data_tests:
+          - not_null
+      - name: latest_state
+        description: >
+          Opaque argMaxState(...) aggregate holding every value column for
+          the most recent event of this source_id. Read it only through
+          int_measureup_exam_subdomain_latest_state, which resolves it
+          into plain columns with argMaxMerge.
+
+  - name: int_measureup_exam_subdomain_latest_state
+    description: >
+      One row per source_id, resolved from
+      mv_measureup_exam_subdomain_latest_state into plain columns — the
+      most recent UPSERT or DELETE event recorded for each ExamSubDomain
+      record, regardless of whether that record is currently deleted.
+    columns:
+      - name: source_id
+        description: Raw Django primary key of the source ExamSubDomain row.
+        data_tests:
+          - unique
+          - not_null
+      - name: exam_domain_id
+        description: Raw Django primary key of the parent ExamDomain row.
+        data_tests:
+          - not_null
+      - name: name
+        description: Subdomain display name.
+        data_tests:
+          - not_null
+      - name: is_deleted
+        description: >
+          Sink tombstone flag for this event. Stored as the sink's own
+          'True'/'False' string values.
+        data_tests:
+          - accepted_values:
+              values: ["True", "False"]
+      - name: time_last_dumped
+        description: When this event was written to ClickHouse.
+      - name: sink_event_id
+        description: >
+          Unique identifier for this specific sink event; the final
+          tie-breaker in the latest-state ordering when every other field
+          in the tuple matches.
+
+  - name: int_measureup_exam_subdomain_current
+    description: >
+      Current-state view of ExamSubDomain records: exactly one row per
+      source_id whose most recent event was not a DELETE. This is the
+      model reporting and dashboards should query — never the raw
+      event_sink table directly.
+    data_tests:
+      - measureup_current_matches_latest_event:
+          source_name: measureup_event_sink
+          source_table: measureup_exam_subdomain
+    columns:
+      - name: source_id
+        description: Raw Django primary key of the source ExamSubDomain row.
+        data_tests:
+          - unique
+          - not_null
+      - name: exam_domain_id
+        description: >
+          Raw Django primary key of the parent ExamDomain row. The Django
+          relation is on_delete=CASCADE (verified in
+          measureup_plugin/models.py), so a normal delete cannot orphan
+          this row — severity is warn for the same reason documented on
+          int_measureup_exam_domain_current.exam_test_id.
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('int_measureup_exam_domain_current')
+              field: source_id
+              config:
+                severity: warn
+      - name: is_deleted
+        description: Always 'False' here by construction — tombstones are filtered out.
+        data_tests:
+          - accepted_values:
+              values: ["False"]
+
+  - name: mv_measureup_question_latest_state
+    description: >
+      Incrementally-maintained argMax aggregate state, one row per source_id,
+      tracking the most recent event recorded for each Question record.
+      Backed by an AggregatingMergeTree materialized view, so new raw
+      events are absorbed automatically as they arrive — no dbt run
+      required to stay current.
+
+
+      Not covered by dbt unit tests: the latest_state column is a ClickHouse
+      AggregateFunction, and ClickHouse does not support deserializing that
+      type for dbt's expected-vs-actual comparison. Deduplication behavior
+      for this model is validated with a real-ClickHouse integration check
+      instead of dbt's native unit_tests mechanism.
+    columns:
+      - name: source_id
+        description: Raw Django primary key of the source Question row.
+        data_tests:
+          - not_null
+      - name: latest_state
+        description: >
+          Opaque argMaxState(...) aggregate holding every value column for
+          the most recent event of this source_id. Read it only through
+          int_measureup_question_latest_state, which resolves it into
+          plain columns with argMaxMerge.
+
+  - name: int_measureup_question_latest_state
+    description: >
+      One row per source_id, resolved from mv_measureup_question_latest_state
+      into plain columns — the most recent UPSERT or DELETE event recorded
+      for each Question record, regardless of whether that record is
+      currently deleted.
+    columns:
+      - name: source_id
+        description: Raw Django primary key of the source Question row.
+        data_tests:
+          - unique
+          - not_null
+      - name: exam_subdomain_id
+        description: Raw Django primary key of the parent ExamSubDomain row.
+        data_tests:
+          - not_null
+      - name: name
+        description: Question display name.
+        data_tests:
+          - not_null
+      - name: content
+        description: >
+          Canonical JSON with the question's restricted content (stem,
+          choices, etc.). Not intended for general Superset exposure —
+          mirrors course_licensing_other_course_settings_cache.settings.
+          Defaults to '{}' at the ClickHouse column level.
+      - name: is_deleted
+        description: >
+          Sink tombstone flag for this event. Stored as the sink's own
+          'True'/'False' string values.
+        data_tests:
+          - accepted_values:
+              values: ["True", "False"]
+      - name: time_last_dumped
+        description: When this event was written to ClickHouse.
+      - name: sink_event_id
+        description: >
+          Unique identifier for this specific sink event; the final
+          tie-breaker in the latest-state ordering when every other field
+          in the tuple matches.
+
+  - name: int_measureup_question_current
+    description: >
+      Current-state view of Question records: exactly one row per source_id
+      whose most recent event was not a DELETE. This is the model
+      reporting and dashboards should query — never the raw event_sink
+      table directly. It is the leaf level of the MeasureUp test catalog
+      hierarchy (ExamTest → ExamDomain → ExamSubDomain → Question).
+    data_tests:
+      - measureup_current_matches_latest_event:
+          source_name: measureup_event_sink
+          source_table: measureup_question
+    columns:
+      - name: source_id
+        description: Raw Django primary key of the source Question row.
+        data_tests:
+          - unique
+          - not_null
+      - name: exam_subdomain_id
+        description: >
+          Raw Django primary key of the parent ExamSubDomain row. The
+          Django relation is on_delete=CASCADE (verified in
+          measureup_plugin/models.py), so a normal delete cannot orphan
+          this row — severity is warn for the same reason documented on
+          int_measureup_exam_domain_current.exam_test_id.
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('int_measureup_exam_subdomain_current')
+              field: source_id
+              config:
+                severity: warn
+      - name: content
+        description: >
+          Canonical JSON with the question's restricted content. Not
+          intended for general Superset exposure.
+        data_tests:
+          - measureup_valid_json:
+              config:
+                tags:
+                  - measureup
+                  - measureup_exam_catalog
+      - name: is_deleted
+        description: Always 'False' here by construction — tombstones are filtered out.
+        data_tests:
+          - accepted_values:
+              values: ["False"]

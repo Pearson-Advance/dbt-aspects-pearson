@@ -95,3 +95,37 @@ jobs:
           }
 
           echo "Validated $current_model_count current model(s), each with exactly one unit test."
+
+      - name: Verify MeasureUp CI inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Scales automatically as MeasureUp entities are added: every
+          # int_..._current model must carry exactly one unit test. No fixed
+          # counts, so adding an entity never requires touching this step.
+          current_model_count="$({
+            dbt --quiet ls \
+              --resource-type model \
+              --select tag:measureup_current \
+              --output name
+          } | sed '/^[[:space:]]*$/d' | wc -l | tr -d ' ')"
+
+          unit_test_count="$({
+            dbt --quiet ls \
+              --resource-type unit_test \
+              --select tag:measureup_current \
+              --output name
+          } | sed '/^[[:space:]]*$/d' | wc -l | tr -d ' ')"
+
+          test "$current_model_count" -gt 0 || {
+            echo "Expected at least one MeasureUp current model." >&2
+            exit 1
+          }
+
+          test "$current_model_count" -eq "$unit_test_count" || {
+            echo "Expected one unit test per current model: $current_model_count current model(s), $unit_test_count unit test(s)." >&2
+            exit 1
+          }
+
+          echo "Validated $current_model_count current model(s), each with exactly one unit test."

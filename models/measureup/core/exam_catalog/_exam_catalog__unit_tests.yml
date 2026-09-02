@@ -1,0 +1,213 @@
+unit_tests:
+  - name: test_measureup_exam_test_current_filters_tombstones
+    description: >
+      The current view keeps the latest active ExamTest record and excludes
+      any record whose latest event is a deletion tombstone. Mocks
+      int_measureup_exam_test_latest_state directly, since the upstream mv_
+      layer (argMaxState) cannot be covered by dbt unit tests — see the note
+      on that model. Uses format: sql throughout; dbt-clickhouse 1.9.4 on
+      dbt-core 1.9.11 fails with a "get_expected_sql takes not more than 2
+      argument(s)" compiler error on the inline list-of-dicts rows: format,
+      regardless of the target model's own materialization. UUIDs are fixed
+      literals, not generateUUIDv4(), so the expected rows are deterministic
+      and comparable.
+    model: int_measureup_exam_test_current
+    given:
+      - input: ref("int_measureup_exam_test_latest_state")
+        format: sql
+        rows: |
+          select
+              '1' as source_id, 'ext-1' as external_id, 'Active Test' as name,
+              '50' as default_question_count, 'PROD-1' as product_id,
+              '90' as exam_time, '70' as cut_score, 'REF-1' as reference,
+              'proctored' as exam_mode, 'en' as exam_language,
+              '2026-01-01T00:00:00Z' as exam_last_updated,
+              'UPSERT' as operation, 'False' as is_deleted,
+              '2026-01-01 00:00:00.000000+00:00' as source_updated_at,
+              '2026-01-01 00:00:01.000000+00:00' as time_last_dumped,
+              toUUID('11111111-1111-1111-1111-111111111111') as dump_id,
+              toUUID('22222222-2222-2222-2222-222222222221') as sink_event_id,
+              '2' as schema_version
+          union all
+          select
+              '2', 'ext-2', 'Deleted Test',
+              '40', 'PROD-2',
+              '90', '70', 'REF-2',
+              'proctored', 'en',
+              '2026-01-01T00:00:00Z',
+              'DELETE', 'True',
+              '2026-01-01 01:00:00.000000+00:00',
+              '2026-01-01 01:00:01.000000+00:00',
+              toUUID('11111111-1111-1111-1111-111111111112'),
+              toUUID('22222222-2222-2222-2222-222222222222'),
+              '2'
+    expect:
+      format: sql
+      rows: |
+        select
+            '1' as source_id, 'ext-1' as external_id, 'Active Test' as name,
+            '50' as default_question_count, 'PROD-1' as product_id,
+            '90' as exam_time, '70' as cut_score, 'REF-1' as reference,
+            'proctored' as exam_mode, 'en' as exam_language,
+            '2026-01-01T00:00:00Z' as exam_last_updated,
+            'UPSERT' as operation, 'False' as is_deleted,
+            '2026-01-01 00:00:00.000000+00:00' as source_updated_at,
+            '2026-01-01 00:00:01.000000+00:00' as time_last_dumped,
+            toUUID('11111111-1111-1111-1111-111111111111') as dump_id,
+            toUUID('22222222-2222-2222-2222-222222222221') as sink_event_id,
+            '2' as schema_version
+
+  - name: test_measureup_exam_domain_current_filters_tombstones
+    description: >
+      The current view keeps the latest active ExamDomain record and
+      excludes any record whose latest event is a deletion tombstone.
+      Mocks int_measureup_exam_domain_latest_state directly, for the same
+      reasons documented on the exam_test unit test above. Both rows share
+      the identical source_updated_at on purpose — verified in
+      aspects_plugin/sinks/measure_up/serializers.py that every ExamDomain
+      row inherits its source_updated_at from the parent ExamTest, so
+      time_last_dumped, not source_updated_at, is what actually
+      discriminates between them here.
+    model: int_measureup_exam_domain_current
+    given:
+      - input: ref("int_measureup_exam_domain_latest_state")
+        format: sql
+        rows: |
+          select
+              '1' as source_id, 'ext-domain-1' as external_id,
+              '1' as exam_test_id, 'Active Domain' as name,
+              'UPSERT' as operation, 'False' as is_deleted,
+              '2026-01-01 00:00:00.000000+00:00' as source_updated_at,
+              '2026-01-01 00:00:01.000000+00:00' as time_last_dumped,
+              toUUID('11111111-1111-1111-1111-111111111111') as dump_id,
+              toUUID('22222222-2222-2222-2222-222222222221') as sink_event_id,
+              '2' as schema_version
+          union all
+          select
+              '2', 'ext-domain-2',
+              '1', 'Deleted Domain',
+              'DELETE', 'True',
+              '2026-01-01 00:00:00.000000+00:00',
+              '2026-01-01 01:00:01.000000+00:00',
+              toUUID('11111111-1111-1111-1111-111111111112'),
+              toUUID('22222222-2222-2222-2222-222222222222'),
+              '2'
+    expect:
+      format: sql
+      rows: |
+        select
+            '1' as source_id, 'ext-domain-1' as external_id,
+            '1' as exam_test_id, 'Active Domain' as name,
+            'UPSERT' as operation, 'False' as is_deleted,
+            '2026-01-01 00:00:00.000000+00:00' as source_updated_at,
+            '2026-01-01 00:00:01.000000+00:00' as time_last_dumped,
+            toUUID('11111111-1111-1111-1111-111111111111') as dump_id,
+            toUUID('22222222-2222-2222-2222-222222222221') as sink_event_id,
+            '2' as schema_version
+
+  - name: test_measureup_exam_subdomain_current_filters_tombstones
+    description: >
+      The current view keeps the latest active ExamSubDomain record and
+      excludes any record whose latest event is a deletion tombstone.
+      Mocks int_measureup_exam_subdomain_latest_state directly, for the
+      same reasons documented on the exam_test unit test above. Both rows
+      share the identical source_updated_at on purpose — verified in
+      aspects_plugin/sinks/measure_up/serializers.py that every
+      ExamSubDomain row inherits its source_updated_at from the root
+      ExamTest (two levels up), so time_last_dumped, not
+      source_updated_at, is what actually discriminates between them here.
+    model: int_measureup_exam_subdomain_current
+    given:
+      - input: ref("int_measureup_exam_subdomain_latest_state")
+        format: sql
+        rows: |
+          select
+              '1' as source_id, 'ext-subdomain-1' as external_id,
+              '1' as exam_domain_id, 'Active Subdomain' as name,
+              'UPSERT' as operation, 'False' as is_deleted,
+              '2026-01-01 00:00:00.000000+00:00' as source_updated_at,
+              '2026-01-01 00:00:01.000000+00:00' as time_last_dumped,
+              toUUID('11111111-1111-1111-1111-111111111111') as dump_id,
+              toUUID('22222222-2222-2222-2222-222222222221') as sink_event_id,
+              '2' as schema_version
+          union all
+          select
+              '2', 'ext-subdomain-2',
+              '1', 'Deleted Subdomain',
+              'DELETE', 'True',
+              '2026-01-01 00:00:00.000000+00:00',
+              '2026-01-01 01:00:01.000000+00:00',
+              toUUID('11111111-1111-1111-1111-111111111112'),
+              toUUID('22222222-2222-2222-2222-222222222222'),
+              '2'
+    expect:
+      format: sql
+      rows: |
+        select
+            '1' as source_id, 'ext-subdomain-1' as external_id,
+            '1' as exam_domain_id, 'Active Subdomain' as name,
+            'UPSERT' as operation, 'False' as is_deleted,
+            '2026-01-01 00:00:00.000000+00:00' as source_updated_at,
+            '2026-01-01 00:00:01.000000+00:00' as time_last_dumped,
+            toUUID('11111111-1111-1111-1111-111111111111') as dump_id,
+            toUUID('22222222-2222-2222-2222-222222222221') as sink_event_id,
+            '2' as schema_version
+
+  - name: test_measureup_question_current_filters_tombstones
+    description: >
+      The current view keeps the latest active Question record and
+      excludes any record whose latest event is a deletion tombstone.
+      Mocks int_measureup_question_latest_state directly, for the same
+      reasons documented on the exam_test unit test above. Both rows
+      share the identical source_updated_at on purpose — verified in
+      aspects_plugin/sinks/measure_up/serializers.py that every Question
+      row inherits its source_updated_at from the root ExamTest (three
+      levels up), so time_last_dumped, not source_updated_at, is what
+      actually discriminates between them here. content uses a realistic
+      JSON payload to exercise the same field the measureup_valid_json
+      data test covers on the model itself.
+    model: int_measureup_question_current
+    given:
+      - input: ref("int_measureup_question_latest_state")
+        format: sql
+        rows: |
+          select
+              '1' as source_id, 'ext-question-1' as external_id,
+              '1' as exam_subdomain_id, 'Active Question' as name,
+              'multiple_choice' as question_type,
+              '{"stem":"2 + 2 = ?","choices":["3","4","5"]}' as content,
+              'False' as is_demo,
+              'UPSERT' as operation, 'False' as is_deleted,
+              '2026-01-01 00:00:00.000000+00:00' as source_updated_at,
+              '2026-01-01 00:00:01.000000+00:00' as time_last_dumped,
+              toUUID('11111111-1111-1111-1111-111111111111') as dump_id,
+              toUUID('22222222-2222-2222-2222-222222222221') as sink_event_id,
+              '2' as schema_version
+          union all
+          select
+              '2', 'ext-question-2',
+              '1', 'Deleted Question',
+              'multiple_choice',
+              '{"stem":"3 + 3 = ?","choices":["5","6","7"]}',
+              'False',
+              'DELETE', 'True',
+              '2026-01-01 00:00:00.000000+00:00',
+              '2026-01-01 01:00:01.000000+00:00',
+              toUUID('11111111-1111-1111-1111-111111111112'),
+              toUUID('22222222-2222-2222-2222-222222222222'),
+              '2'
+    expect:
+      format: sql
+      rows: |
+        select
+            '1' as source_id, 'ext-question-1' as external_id,
+            '1' as exam_subdomain_id, 'Active Question' as name,
+            'multiple_choice' as question_type,
+            '{"stem":"2 + 2 = ?","choices":["3","4","5"]}' as content,
+            'False' as is_demo,
+            'UPSERT' as operation, 'False' as is_deleted,
+            '2026-01-01 00:00:00.000000+00:00' as source_updated_at,
+            '2026-01-01 00:00:01.000000+00:00' as time_last_dumped,
+            toUUID('11111111-1111-1111-1111-111111111111') as dump_id,
+            toUUID('22222222-2222-2222-2222-222222222221') as sink_event_id,
+            '2' as schema_version
