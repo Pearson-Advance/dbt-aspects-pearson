@@ -1,0 +1,112 @@
+version: 2
+
+sources:
+  - name: measureup_event_sink
+    database: "{{ env_var('ASPECTS_EVENT_SINK_DATABASE', 'event_sink') }}"
+    tables:
+      - name: measureup_exam_test
+        description: >
+          Append-only history of MeasureUp ExamTest events (the root of the
+          test catalog hierarchy). One row per UPSERT or DELETE event; the
+          current record per source_id must be resolved downstream.
+          ExamTest enforces a DB-level uniqueness constraint on
+          (product_id, name, exam_last_updated), not on source_id — do not
+          collapse records by those fields instead of source_id, since
+          different test versions must remain distinguishable (verified in
+          measureup_plugin/models.py, ExamTest.Meta.constraints).
+        loaded_at_field: time_last_dumped
+        columns:
+          - name: source_id
+          - name: external_id
+          - name: name
+          - name: default_question_count
+          - name: product_id
+          - name: exam_time
+          - name: cut_score
+          - name: reference
+          - name: exam_mode
+          - name: exam_language
+          - name: exam_last_updated
+          - name: operation
+          - name: is_deleted
+          - name: source_updated_at
+          - name: time_last_dumped
+          - name: dump_id
+          - name: sink_event_id
+          - name: schema_version
+
+      - name: measureup_exam_domain
+        description: >
+          Append-only history of MeasureUp ExamDomain events. One row per
+          UPSERT or DELETE event; the current record per source_id must be
+          resolved downstream. exam_test_id references
+          measureup_exam_test.source_id. source_updated_at is inherited
+          from the parent ExamTest's exam_last_updated (verified in
+          aspects_plugin/sinks/measure_up/serializers.py) — it is identical
+          across every sibling domain under the same test, so
+          time_last_dumped (not source_updated_at) must remain the primary
+          ordering field.
+        loaded_at_field: time_last_dumped
+        columns:
+          - name: source_id
+          - name: external_id
+          - name: exam_test_id
+          - name: name
+          - name: operation
+          - name: is_deleted
+          - name: source_updated_at
+          - name: time_last_dumped
+          - name: dump_id
+          - name: sink_event_id
+          - name: schema_version
+
+      - name: measureup_exam_subdomain
+        description: >
+          Append-only history of MeasureUp ExamSubDomain events. One row
+          per UPSERT or DELETE event; the current record per source_id must
+          be resolved downstream. exam_domain_id references
+          measureup_exam_domain.source_id. source_updated_at is inherited
+          from the root ExamTest's exam_last_updated, two levels up — same
+          caveat as measureup_exam_domain above.
+        loaded_at_field: time_last_dumped
+        columns:
+          - name: source_id
+          - name: external_id
+          - name: exam_domain_id
+          - name: name
+          - name: operation
+          - name: is_deleted
+          - name: source_updated_at
+          - name: time_last_dumped
+          - name: dump_id
+          - name: sink_event_id
+          - name: schema_version
+
+      - name: measureup_question
+        description: >
+          Append-only history of MeasureUp Question events. One row per
+          UPSERT or DELETE event; the current record per source_id must be
+          resolved downstream. exam_subdomain_id references
+          measureup_exam_subdomain.source_id. content is restricted JSON
+          question content (defaults to '{}' at the ClickHouse column
+          level) — not for general exposure, mirrors
+          course_licensing_other_course_settings_cache.settings.
+          source_updated_at is inherited from the root ExamTest's
+          exam_last_updated, three levels up — same caveat as
+          measureup_exam_domain above.
+        loaded_at_field: time_last_dumped
+        columns:
+          - name: source_id
+          - name: external_id
+          - name: exam_subdomain_id
+          - name: name
+          - name: question_type
+          - name: content
+          - name: is_demo
+          - name: operation
+          - name: is_deleted
+          - name: source_updated_at
+          - name: time_last_dumped
+          - name: dump_id
+          - name: sink_event_id
+          - name: schema_version
