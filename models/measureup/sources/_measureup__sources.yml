@@ -110,3 +110,138 @@ sources:
           - name: dump_id
           - name: sink_event_id
           - name: schema_version
+
+      - name: measureup_exam_test_attempt
+        description: >
+          Append-only history of ExamTestAttempt events. One row per UPSERT or
+          DELETE event; the latest and current record per source_id must be
+          resolved downstream.
+        loaded_at_field: time_last_dumped
+        columns:
+          - name: source_id
+          - name: exam_test_id
+          - name: lti_launch_event_id
+          - name: flow_state
+          - name: attempt_initiated_datetime
+          - name: attempt_finished_datetime
+          - name: attempt_duration
+          - name: final_score
+          - name: is_passed
+          - name: mode
+          - name: mup_attempt_configuration
+          - name: operation
+          - name: is_deleted
+          - name: source_updated_at
+          - name: time_last_dumped
+          - name: dump_id
+          - name: sink_event_id
+          - name: schema_version
+
+      - name: measureup_lti_launch_context
+        description: >
+          Append-only history of LTI launch context events. One row per UPSERT or
+          DELETE event; the latest and current record per source_id must be
+          resolved downstream.
+        loaded_at_field: time_last_dumped
+        columns:
+          - name: source_id
+          - name: course_enrollment_id
+          - name: user_id
+          - name: course_id
+          - name: block_id
+          - name: resource_link_id
+          - name: product_id
+          - name: last_launch_attempt_date
+          - name: operation
+          - name: is_deleted
+          - name: source_updated_at
+          - name: time_last_dumped
+          - name: dump_id
+          - name: sink_event_id
+          - name: schema_version
+
+      - name: measureup_exam_attempt_domain
+        description: >
+          Append-only history of ExamAttemptDomain events. One row per UPSERT or
+          DELETE event; the latest and current record per source_id must be
+          resolved downstream.
+        loaded_at_field: time_last_dumped
+        columns:
+          - name: source_id
+          - name: exam_domain_id
+          - name: exam_attempt_id
+          - name: average_score
+          - name: operation
+          - name: is_deleted
+          - name: source_updated_at
+          - name: time_last_dumped
+          - name: dump_id
+          - name: sink_event_id
+          - name: schema_version
+
+      - name: measureup_exam_attempt_subdomain
+        description: >
+          Append-only history of ExamAttemptSubDomain events. One row per UPSERT or
+          DELETE event; the latest and current record per source_id must be
+          resolved downstream.
+        loaded_at_field: time_last_dumped
+        columns:
+          - name: source_id
+          - name: exam_subdomain_id
+          - name: attempt_domain_id
+          - name: average_score
+          - name: operation
+          - name: is_deleted
+          - name: source_updated_at
+          - name: time_last_dumped
+          - name: dump_id
+          - name: sink_event_id
+          - name: schema_version
+
+      - name: measureup_exam_question_attempt
+        description: >
+          Append-only history of ExamQuestionAttempt events. One row per UPSERT or
+          DELETE event; the latest and current record per source_id must be
+          resolved downstream.
+        loaded_at_field: time_last_dumped
+        columns:
+          - name: source_id
+          - name: question_id
+          - name: subdomain_attempt_id
+          - name: score
+          - name: answer_shown
+          - name: review_marked
+          - name: status
+          - name: displayed
+          - name: answer
+          - name: operation
+          - name: is_deleted
+          - name: source_updated_at
+          - name: time_last_dumped
+          - name: dump_id
+          - name: sink_event_id
+          - name: schema_version
+
+      - name: measureup_exam_ready_status
+        description: >
+          Append-only history of ExamReadyStatus events. One row per UPSERT or
+          DELETE event; the latest and current record per source_id must be
+          resolved downstream.
+        loaded_at_field: time_last_dumped
+        columns:
+          - name: source_id
+          - name: course_enrollment_id
+          - name: user_id
+          - name: course_id
+          - name: enrollment_mode
+          - name: enrollment_is_active
+          - name: status
+          - name: last_score
+          - name: status_updated_at
+          - name: operation
+          - name: is_deleted
+          - name: source_updated_at
+          - name: time_last_dumped
+          - name: dump_id
+          - name: sink_event_id
+          - name: schema_version

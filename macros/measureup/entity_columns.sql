@@ -99,3 +99,145 @@
         )
     }}
 {% endmacro %}
+
+
+{# Attempt, result, readiness, and LTI-context sink contracts. #}
+{% macro measureup_exam_test_attempt_columns() %}
+    {{
+        return(
+            [
+                "exam_test_id",
+                "lti_launch_event_id",
+                "flow_state",
+                "attempt_initiated_datetime",
+                "attempt_finished_datetime",
+                "attempt_duration",
+                "final_score",
+                "is_passed",
+                "mode",
+                "mup_attempt_configuration",
+                "operation",
+                "is_deleted",
+                "source_updated_at",
+                "time_last_dumped",
+                "dump_id",
+                "sink_event_id",
+                "schema_version",
+            ]
+        )
+    }}
+{% endmacro %}
+
+
+{% macro measureup_exam_attempt_domain_columns() %}
+    {{
+        return(
+            [
+                "exam_domain_id",
+                "exam_attempt_id",
+                "average_score",
+                "operation",
+                "is_deleted",
+                "source_updated_at",
+                "time_last_dumped",
+                "dump_id",
+                "sink_event_id",
+                "schema_version",
+            ]
+        )
+    }}
+{% endmacro %}
+
+
+{% macro measureup_exam_attempt_subdomain_columns() %}
+    {{
+        return(
+            [
+                "exam_subdomain_id",
+                "attempt_domain_id",
+                "average_score",
+                "operation",
+                "is_deleted",
+                "source_updated_at",
+                "time_last_dumped",
+                "dump_id",
+                "sink_event_id",
+                "schema_version",
+            ]
+        )
+    }}
+{% endmacro %}
+
+
+{% macro measureup_exam_question_attempt_columns() %}
+    {{
+        return(
+            [
+                "question_id",
+                "subdomain_attempt_id",
+                "score",
+                "answer_shown",
+                "review_marked",
+                "status",
+                "displayed",
+                "answer",
+                "operation",
+                "is_deleted",
+                "source_updated_at",
+                "time_last_dumped",
+                "dump_id",
+                "sink_event_id",
+                "schema_version",
+            ]
+        )
+    }}
+{% endmacro %}
+
+
+{% macro measureup_exam_ready_status_columns() %}
+    {{
+        return(
+            [
+                "course_enrollment_id",
+                "user_id",
+                "course_id",
+                "enrollment_mode",
+                "enrollment_is_active",
+                "status",
+                "last_score",
+                "status_updated_at",
+                "operation",
+                "is_deleted",
+                "source_updated_at",
+                "time_last_dumped",
+                "dump_id",
+                "sink_event_id",
+                "schema_version",
+            ]
+        )
+    }}
+{% endmacro %}
+
+
+{% macro measureup_lti_launch_context_columns() %}
+    {{
+        return(
+            [
+                "course_enrollment_id",
+                "user_id",
+                "course_id",
+                "block_id",
+                "resource_link_id",
+                "product_id",
+                "last_launch_attempt_date",
+                "operation",
+                "is_deleted",
+                "source_updated_at",
+                "time_last_dumped",
+                "dump_id",
+                "sink_event_id",
+                "schema_version",
+            ]
+        )
+    }}
+{% endmacro %}
