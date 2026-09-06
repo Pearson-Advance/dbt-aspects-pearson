@@ -142,6 +142,12 @@ models:
           - not_null
       - name: course_enrollment_id
         description: Related Open edX course-enrollment identifier when available.
+      - name: user_id
+        description: Learner identifier projected from the related course enrollment.
+      - name: course_id
+        description: Open edX course key projected from the related course enrollment.
+      - name: block_id
+        description: Open edX block usage key associated with the LTI launch context.
       - name: resource_link_id
         description: LTI resource-link identifier captured at launch time.
       - name: product_id
