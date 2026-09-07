@@ -1,0 +1,82 @@
+version: 2
+
+models:
+  - name: mv_measureup_exam_ready_status_latest_state
+    description: >
+      Incrementally maintained argMax aggregate state for ExamReadyStatus events,
+      one row per source_id.
+    columns:
+      - name: source_id
+        description: Source model primary key.
+        data_tests:
+          - not_null
+      - name: latest_state
+        description: Opaque argMaxState finalized by the corresponding latest-state view.
+  - name: int_measureup_exam_ready_status_latest_state
+    description: >
+      One finalized latest UPSERT or DELETE event per ExamReadyStatus source_id.
+    columns:
+      - name: source_id
+        description: Source model primary key.
+        data_tests:
+          - unique
+          - not_null
+      - name: operation
+        description: Sink operation represented by the latest event.
+        data_tests:
+          - accepted_values:
+              values: ["UPSERT", "DELETE"]
+      - name: is_deleted
+        description: Sink tombstone flag stored as 'True' or 'False'.
+        data_tests:
+          - accepted_values:
+              values: ["True", "False"]
+      - name: time_last_dumped
+        description: Primary timestamp used to resolve the latest event per source_id.
+        data_tests:
+          - not_null
+      - name: sink_event_id
+        description: Deterministic final tie-breaker for latest-event ordering.
+        data_tests:
+          - not_null
+  - name: int_measureup_exam_ready_status_current
+    description: >
+      Current non-deleted representation of ExamReadyStatus, one row per source_id.
+    data_tests:
+      - measureup_current_matches_latest_event:
+          source_name: measureup_event_sink
+          source_table: measureup_exam_ready_status
+    columns:
+      - name: source_id
+        description: Source model primary key.
+        data_tests:
+          - unique
+          - not_null
+      - name: course_enrollment_id
+        description: Open edX course-enrollment identifier at the readiness source grain.
+        data_tests:
+          - not_null
+      - name: user_id
+        description: Learner identifier projected from the related course enrollment.
+      - name: course_id
+        description: Course key projected from the related course enrollment.
+      - name: status
+        description: Current MeasureUp readiness status.
+        data_tests:
+          - not_null
+      - name: last_score
+        description: Most recent readiness score; nullable when no score is available.
+      - name: status_updated_at
+        description: Source-side readiness update timestamp.
+        data_tests:
+          - not_null
+      - name: is_deleted
+        description: Always 'False' in the current model.
+        data_tests:
+          - accepted_values:
+              values: ["False"]
+      - name: schema_version
+        description: MeasureUp event-sink schema version.
+        data_tests:
+          - accepted_values:
+              values: ["2"]

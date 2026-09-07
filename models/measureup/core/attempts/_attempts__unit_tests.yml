@@ -1,0 +1,74 @@
+unit_tests:
+  - name: test_measureup_exam_test_attempt_current_filters_tombstones
+    description: The current view keeps active exam_test_attempt rows and excludes tombstones.
+    model: int_measureup_exam_test_attempt_current
+    given:
+      - input: ref("int_measureup_exam_test_attempt_latest_state")
+        format: sql
+        rows: |
+          select '1' as source_id, '101' as exam_test_id, cast(null as Nullable(String)) as lti_launch_event_id,
+              'completed' as flow_state, '2026-01-01 00:00:00+00:00' as attempt_initiated_datetime,
+              '2026-01-01 00:45:00+00:00' as attempt_finished_datetime, 'PT45M' as attempt_duration,
+              '84.50' as final_score, 'True' as is_passed, 'practice' as mode,
+              '{"attemptMode":"practice"}' as mup_attempt_configuration, 'UPSERT' as operation, 'False' as is_deleted,
+              '2026-01-01 00:00:00.000000+00:00' as source_updated_at,
+              '2026-01-01 00:00:01.000000+00:00' as time_last_dumped,
+              toUUID('11111111-1111-1111-1111-000000000001') as dump_id,
+              toUUID('22222222-2222-2222-2222-000000000001') as sink_event_id, '2' as schema_version
+          union all
+          select '2' as source_id, '102' as exam_test_id, '1002' as lti_launch_event_id, 'completed' as flow_state,
+              '2026-01-01 01:00:00+00:00' as attempt_initiated_datetime,
+              '2026-01-01 01:30:00+00:00' as attempt_finished_datetime, 'PT30M' as attempt_duration,
+              '60.00' as final_score, 'False' as is_passed, 'certification' as mode,
+              '{"attemptMode":"certification"}' as mup_attempt_configuration, 'DELETE' as operation,
+              'True' as is_deleted, '2026-01-01 00:00:01.000000+00:00' as source_updated_at,
+              '2026-01-01 00:00:02.000000+00:00' as time_last_dumped,
+              toUUID('11111111-1111-1111-1111-000000000002') as dump_id,
+              toUUID('22222222-2222-2222-2222-000000000002') as sink_event_id, '2' as schema_version
+    expect:
+      format: sql
+      rows: |
+        select '1' as source_id, '101' as exam_test_id, cast(null as Nullable(String)) as lti_launch_event_id,
+            'completed' as flow_state, '2026-01-01 00:00:00+00:00' as attempt_initiated_datetime,
+            '2026-01-01 00:45:00+00:00' as attempt_finished_datetime, 'PT45M' as attempt_duration,
+            '84.50' as final_score, 'True' as is_passed, 'practice' as mode,
+            '{"attemptMode":"practice"}' as mup_attempt_configuration, 'UPSERT' as operation, 'False' as is_deleted,
+            '2026-01-01 00:00:00.000000+00:00' as source_updated_at,
+            '2026-01-01 00:00:01.000000+00:00' as time_last_dumped,
+            toUUID('11111111-1111-1111-1111-000000000001') as dump_id,
+            toUUID('22222222-2222-2222-2222-000000000001') as sink_event_id, '2' as schema_version
+  - name: test_measureup_lti_launch_context_current_filters_tombstones
+    description: The current view keeps active lti_launch_context rows and excludes tombstones.
+    model: int_measureup_lti_launch_context_current
+    given:
+      - input: ref("int_measureup_lti_launch_context_latest_state")
+        format: sql
+        rows: |
+          select '1001' as source_id, '501' as course_enrollment_id, '42' as user_id,
+              'course-v1:VUE+AZ900+2026' as course_id,
+              'block-v1:VUE+AZ900+2026+type@lti_consumer+block@measureup' as block_id, 'product-100' as resource_link_id,
+              'product-100' as product_id, '2026-01-01 00:00:00+00:00' as last_launch_attempt_date,
+              'UPSERT' as operation, 'False' as is_deleted, '2026-01-01 00:00:00.000000+00:00' as source_updated_at,
+              '2026-01-01 00:00:01.000000+00:00' as time_last_dumped,
+              toUUID('11111111-1111-1111-1111-000000000001') as dump_id,
+              toUUID('22222222-2222-2222-2222-000000000001') as sink_event_id, '2' as schema_version
+          union all
+          select '1002' as source_id, '502' as course_enrollment_id, '43' as user_id,
+              'course-v1:VUE+AZ104+2026' as course_id,
+              'block-v1:VUE+AZ104+2026+type@lti_consumer+block@measureup' as block_id, 'product-200' as resource_link_id,
+              'product-200' as product_id, '2026-01-01 01:00:00+00:00' as last_launch_attempt_date,
+              'DELETE' as operation, 'True' as is_deleted, '2026-01-01 00:00:01.000000+00:00' as source_updated_at,
+              '2026-01-01 00:00:02.000000+00:00' as time_last_dumped,
+              toUUID('11111111-1111-1111-1111-000000000002') as dump_id,
+              toUUID('22222222-2222-2222-2222-000000000002') as sink_event_id, '2' as schema_version
+    expect:
+      format: sql
+      rows: |
+        select '1001' as source_id, '501' as course_enrollment_id, '42' as user_id,
+            'course-v1:VUE+AZ900+2026' as course_id,
+            'block-v1:VUE+AZ900+2026+type@lti_consumer+block@measureup' as block_id, 'product-100' as resource_link_id,
+            'product-100' as product_id, '2026-01-01 00:00:00+00:00' as last_launch_attempt_date,
+            'UPSERT' as operation, 'False' as is_deleted, '2026-01-01 00:00:00.000000+00:00' as source_updated_at,
+            '2026-01-01 00:00:01.000000+00:00' as time_last_dumped,
+            toUUID('11111111-1111-1111-1111-000000000001') as dump_id,
+            toUUID('22222222-2222-2222-2222-000000000001') as sink_event_id, '2' as schema_version

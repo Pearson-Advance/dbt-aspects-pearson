@@ -1,0 +1,255 @@
+version: 2
+
+models:
+  - name: mv_measureup_exam_attempt_domain_latest_state
+    description: >
+      Incrementally maintained argMax aggregate state for ExamAttemptDomain events,
+      one row per source_id.
+    columns:
+      - name: source_id
+        description: Source model primary key.
+        data_tests:
+          - not_null
+      - name: latest_state
+        description: Opaque argMaxState finalized by the corresponding latest-state view.
+  - name: int_measureup_exam_attempt_domain_latest_state
+    description: >
+      One finalized latest UPSERT or DELETE event per ExamAttemptDomain source_id.
+    columns:
+      - name: source_id
+        description: Source model primary key.
+        data_tests:
+          - unique
+          - not_null
+      - name: operation
+        description: Sink operation represented by the latest event.
+        data_tests:
+          - accepted_values:
+              values: ["UPSERT", "DELETE"]
+      - name: is_deleted
+        description: Sink tombstone flag stored as 'True' or 'False'.
+        data_tests:
+          - accepted_values:
+              values: ["True", "False"]
+      - name: time_last_dumped
+        description: Primary timestamp used to resolve the latest event per source_id.
+        data_tests:
+          - not_null
+      - name: sink_event_id
+        description: Deterministic final tie-breaker for latest-event ordering.
+        data_tests:
+          - not_null
+  - name: int_measureup_exam_attempt_domain_current
+    description: >
+      Current non-deleted representation of ExamAttemptDomain, one row per source_id.
+    data_tests:
+      - measureup_current_matches_latest_event:
+          source_name: measureup_event_sink
+          source_table: measureup_exam_attempt_domain
+    columns:
+      - name: source_id
+        description: Source model primary key.
+        data_tests:
+          - unique
+          - not_null
+      - name: exam_domain_id
+        description: Related MeasureUp ExamDomain source_id.
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('int_measureup_exam_domain_current')
+              field: source_id
+              config:
+                severity: warn
+      - name: exam_attempt_id
+        description: Related ExamTestAttempt source_id.
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('int_measureup_exam_test_attempt_current')
+              field: source_id
+              config:
+                severity: warn
+      - name: average_score
+        description: Domain-level average score for the attempt.
+      - name: is_deleted
+        description: Always 'False' in the current model.
+        data_tests:
+          - accepted_values:
+              values: ["False"]
+      - name: schema_version
+        description: MeasureUp event-sink schema version.
+        data_tests:
+          - accepted_values:
+              values: ["2"]
+  - name: mv_measureup_exam_attempt_subdomain_latest_state
+    description: >
+      Incrementally maintained argMax aggregate state for ExamAttemptSubDomain events,
+      one row per source_id.
+    columns:
+      - name: source_id
+        description: Source model primary key.
+        data_tests:
+          - not_null
+      - name: latest_state
+        description: Opaque argMaxState finalized by the corresponding latest-state view.
+  - name: int_measureup_exam_attempt_subdomain_latest_state
+    description: >
+      One finalized latest UPSERT or DELETE event per ExamAttemptSubDomain source_id.
+    columns:
+      - name: source_id
+        description: Source model primary key.
+        data_tests:
+          - unique
+          - not_null
+      - name: operation
+        description: Sink operation represented by the latest event.
+        data_tests:
+          - accepted_values:
+              values: ["UPSERT", "DELETE"]
+      - name: is_deleted
+        description: Sink tombstone flag stored as 'True' or 'False'.
+        data_tests:
+          - accepted_values:
+              values: ["True", "False"]
+      - name: time_last_dumped
+        description: Primary timestamp used to resolve the latest event per source_id.
+        data_tests:
+          - not_null
+      - name: sink_event_id
+        description: Deterministic final tie-breaker for latest-event ordering.
+        data_tests:
+          - not_null
+  - name: int_measureup_exam_attempt_subdomain_current
+    description: >
+      Current non-deleted representation of ExamAttemptSubDomain, one row per source_id.
+    data_tests:
+      - measureup_current_matches_latest_event:
+          source_name: measureup_event_sink
+          source_table: measureup_exam_attempt_subdomain
+    columns:
+      - name: source_id
+        description: Source model primary key.
+        data_tests:
+          - unique
+          - not_null
+      - name: exam_subdomain_id
+        description: Related MeasureUp ExamSubDomain source_id.
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('int_measureup_exam_subdomain_current')
+              field: source_id
+              config:
+                severity: warn
+      - name: attempt_domain_id
+        description: Related ExamAttemptDomain source_id.
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('int_measureup_exam_attempt_domain_current')
+              field: source_id
+              config:
+                severity: warn
+      - name: average_score
+        description: Subdomain-level average score for the attempt.
+      - name: is_deleted
+        description: Always 'False' in the current model.
+        data_tests:
+          - accepted_values:
+              values: ["False"]
+      - name: schema_version
+        description: MeasureUp event-sink schema version.
+        data_tests:
+          - accepted_values:
+              values: ["2"]
+  - name: mv_measureup_exam_question_attempt_latest_state
+    description: >
+      Incrementally maintained argMax aggregate state for ExamQuestionAttempt events,
+      one row per source_id.
+    columns:
+      - name: source_id
+        description: Source model primary key.
+        data_tests:
+          - not_null
+      - name: latest_state
+        description: Opaque argMaxState finalized by the corresponding latest-state view.
+  - name: int_measureup_exam_question_attempt_latest_state
+    description: >
+      One finalized latest UPSERT or DELETE event per ExamQuestionAttempt source_id.
+    columns:
+      - name: source_id
+        description: Source model primary key.
+        data_tests:
+          - unique
+          - not_null
+      - name: operation
+        description: Sink operation represented by the latest event.
+        data_tests:
+          - accepted_values:
+              values: ["UPSERT", "DELETE"]
+      - name: is_deleted
+        description: Sink tombstone flag stored as 'True' or 'False'.
+        data_tests:
+          - accepted_values:
+              values: ["True", "False"]
+      - name: time_last_dumped
+        description: Primary timestamp used to resolve the latest event per source_id.
+        data_tests:
+          - not_null
+      - name: sink_event_id
+        description: Deterministic final tie-breaker for latest-event ordering.
+        data_tests:
+          - not_null
+  - name: int_measureup_exam_question_attempt_current
+    description: >
+      Current non-deleted representation of ExamQuestionAttempt, one row per source_id.
+    data_tests:
+      - measureup_current_matches_latest_event:
+          source_name: measureup_event_sink
+          source_table: measureup_exam_question_attempt
+    columns:
+      - name: source_id
+        description: Source model primary key.
+        data_tests:
+          - unique
+          - not_null
+      - name: question_id
+        description: Related MeasureUp Question source_id.
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('int_measureup_question_current')
+              field: source_id
+              config:
+                severity: warn
+      - name: subdomain_attempt_id
+        description: Related ExamAttemptSubDomain source_id.
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('int_measureup_exam_attempt_subdomain_current')
+              field: source_id
+              config:
+                severity: warn
+      - name: score
+        description: Nullable question score exactly as emitted by the source integration.
+      - name: answer
+        description: Restricted canonical JSON containing the learner answer.
+        data_tests:
+          - measureup_valid_json:
+              config:
+                tags:
+                  - measureup
+                  - measureup_attempts_results_readiness_lti
+                  - measureup_results
+      - name: is_deleted
+        description: Always 'False' in the current model.
+        data_tests:
+          - accepted_values:
+              values: ["False"]
+      - name: schema_version
+        description: MeasureUp event-sink schema version.
+        data_tests:
+          - accepted_values:
+              values: ["2"]
