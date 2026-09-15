@@ -1,0 +1,55 @@
+version: 2
+
+models:
+  - name: mart_measureup_attempt_context
+    description: >
+      Shared reusable transformation: one row per current exam attempt,
+      enriched with the exact test version attempted, its LTI launch
+      context when available, and the licensed class that context belongs
+      to when available. Reused by every presentation view descended from
+      an attempt (rpt_measureup_attempts, _domain_performance,
+      _subdomain_performance, _question_performance) so this join chain is
+      written exactly once. Not a dashboard-facing model itself — it is an
+      internal building block for models/measureup/presentation/.
+
+
+      Every join is at most 1:1 (foreign key to the target's source_id, or
+      a deduplicated ccx_id), so this cannot multiply attempt rows —
+      verified against real data: mart row count equals
+      int_measureup_exam_test_attempt_current row count exactly.
+    data_tests:
+      - unique:
+          column_name: exam_attempt_id
+      - not_null:
+          column_name: exam_attempt_id
+    columns:
+      - name: exam_attempt_id
+        description: Same value as int_measureup_exam_test_attempt_current.source_id.
+      - name: exam_test_id
+        description: >
+          Exact MeasureUp test-version source_id attempted. Never collapse
+          by exam_test_product_id or exam_test_name — two versions of the
+          same product can differ in content, scoring, and cut score, so
+          they must stay distinguishable downstream.
+      - name: is_passed
+        description: >
+          Source-reported pass/fail for this attempt. Only meaningful for
+          completed attempts — see flow_state before treating an
+          incomplete attempt as failed.
+      - name: has_lti_context
+        description: >
+          False when this attempt's lti_launch_event_id did not resolve to
+          any row in int_measureup_lti_launch_context_current. Made
+          explicit instead of silently dropping the attempt via an inner
+          join.
+      - name: has_licensed_class_context
+        description: >
+          False when the resolved LTI context's course_id did not match
+          any ccx_id in int_course_licensing_institution_ccx_current — or
+          when there was no LTI context at all. Institution-scoped
+          consumption must treat False here as "ownership unresolved", not
+          as "belongs to no institution".
+      - name: institution_id
+        description: >
+          Raw Django primary key of the owning Institution
+          (course_licensing), when has_licensed_class_context is true.

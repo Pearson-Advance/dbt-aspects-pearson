@@ -1,0 +1,173 @@
+version: 2
+
+models:
+  - name: rpt_measureup_attempts
+    description: >
+      Dashboard-ready grain: one row per current exam attempt. Built on
+      mart_measureup_attempt_context — test version, LTI context, and
+      licensed-class ownership are already resolved there.
+
+
+      Completion rule: an attempt is only "completed" when flow_state
+      indicates completion (e.g. 'complete') AND attempt_finished_datetime
+      is not null. Do not infer completion from is_passed or final_score
+      alone — an incomplete attempt can still carry a stale/partial score.
+
+
+      Pass-rate rule: eligible denominator is completed attempts only (per
+      the rule above). is_passed reflects the source system's own
+      pass/fail determination for a completed attempt; an incomplete
+      attempt must not be counted as failed, and must not be included in
+      either the numerator or the denominator of a pass rate.
+
+
+      Duration: attempt_duration is sourced as-is from the integration.
+      Only meaningful for completed attempts — do not compute duration
+      from timestamps for an attempt still in progress.
+    data_tests:
+      - unique:
+          column_name: exam_attempt_id
+      - not_null:
+          column_name: exam_attempt_id
+    columns:
+      - name: exam_attempt_id
+        description: Grain key — same value as int_measureup_exam_test_attempt_current.source_id.
+      - name: exam_test_id
+        description: >
+          Exact MeasureUp test-version source_id attempted. Never collapse
+          by exam_test_product_id or exam_test_name — different versions
+          of the same product/name must stay distinguishable.
+      - name: is_passed
+        description: Only meaningful when flow_state indicates the attempt completed.
+      - name: has_lti_context
+        description: >
+          False when this attempt has no matching row in
+          int_measureup_lti_launch_context_current. Filter tools should
+          treat this as "context unresolved", not "not applicable".
+      - name: has_licensed_class_context
+        description: >
+          False when the resolved LTI context's course did not match any
+          licensed class in course_licensing. Row-level security scoped by
+          institution_id must exclude rows where this is false, rather
+          than silently including them under no institution.
+      - name: institution_id
+        description: >
+          course_licensing Institution owning this attempt's class, when
+          has_licensed_class_context is true. Empty string, not NULL, when
+          false — see mart_measureup_attempt_context's header for why.
+
+  - name: rpt_measureup_domain_performance
+    description: >
+      Dashboard-ready grain: one row per current attempt-domain result.
+      Both joins (to the domain dimension and to the attempt context) are
+      foreign-key-to-source_id, at most 1:1 — verified against real data
+      that row count equals int_measureup_exam_attempt_domain_current
+      exactly, with no inflation.
+
+
+      average_score is the domain-level average exactly as emitted by the
+      source integration — do not recompute it from question-level scores
+      here; there is no defined weighting rule for doing so at this grain.
+    data_tests:
+      - unique:
+          column_name: attempt_domain_id
+      - not_null:
+          column_name: attempt_domain_id
+    columns:
+      - name: attempt_domain_id
+        description: Grain key — same value as int_measureup_exam_attempt_domain_current.source_id.
+      - name: exam_attempt_id
+        description: >
+          Owning attempt's source_id — join key back to
+          rpt_measureup_attempts for test-version and ownership context.
+      - name: average_score
+        description: Domain-level average score, as emitted by the source integration.
+
+  - name: rpt_measureup_subdomain_performance
+    description: >
+      Dashboard-ready grain: one row per current attempt-subdomain result.
+      attempt_subdomain only carries attempt_domain_id, not
+      exam_attempt_id directly — the join chain passes through
+      int_measureup_exam_attempt_domain_current to reach the attempt and
+      its resolved context. Every join is foreign-key-to-source_id, at
+      most 1:1 — verified against real data that row count equals
+      int_measureup_exam_attempt_subdomain_current exactly.
+    data_tests:
+      - unique:
+          column_name: attempt_subdomain_id
+      - not_null:
+          column_name: attempt_subdomain_id
+    columns:
+      - name: attempt_subdomain_id
+        description: Grain key — same value as int_measureup_exam_attempt_subdomain_current.source_id.
+      - name: attempt_domain_id
+        description: Owning attempt-domain result's source_id.
+      - name: exam_attempt_id
+        description: Owning attempt's source_id, recovered via attempt_domain.
+      - name: average_score
+        description: Subdomain-level average score, as emitted by the source integration.
+
+  - name: rpt_measureup_question_performance
+    description: >
+      Dashboard-ready grain: one row per current question-attempt result —
+      the finest grain in this reporting layer. Three hops back to the
+      attempt and its resolved context (question_attempt ->
+      attempt_subdomain -> attempt_domain -> mart), each
+      foreign-key-to-source_id, at most 1:1 — verified against real data
+      that row count equals int_measureup_exam_question_attempt_current
+      exactly.
+
+
+      score is nullable exactly as emitted by the source — a missing
+      question score must not be treated as zero when averaging; exclude
+      null scores from the denominator rather than counting them as a
+      zero result.
+
+
+      question.content (the question text/choices) and
+      question_attempt.answer (the learner's raw answer) are restricted
+      and are never projected in this or any other presentation view.
+    data_tests:
+      - unique:
+          column_name: question_attempt_id
+      - not_null:
+          column_name: question_attempt_id
+    columns:
+      - name: question_attempt_id
+        description: Grain key — same value as int_measureup_exam_question_attempt_current.source_id.
+      - name: score
+        description: >
+          Nullable exactly as emitted by the source. Exclude nulls from an
+          average rather than treating a missing score as 0.
+      - name: exam_attempt_id
+        description: Owning attempt's source_id, recovered via attempt_subdomain and attempt_domain.
+
+  - name: rpt_measureup_exam_readiness
+    description: >
+      Dashboard-ready grain: one row per current readiness record, at
+      enrollment grain — independent of any specific exam attempt.
+      Deliberately not joined to mart_measureup_attempt_context: readiness
+      is a property of the learner's course enrollment as of now, not of
+      any single historical attempt, so it must not be duplicated across
+      an enrollment's attempts nor presented as "readiness at attempt
+      time".
+
+
+      Readiness-count rule: count distinct exam_ready_status_id (this
+      model's own grain key) per status, filtered by course_id/
+      enrollment_mode as needed — never join this to
+      rpt_measureup_attempts to compute a combined count, since that
+      would multiply readiness rows by however many attempts that learner
+      has made.
+    data_tests:
+      - unique:
+          column_name: exam_ready_status_id
+      - not_null:
+          column_name: exam_ready_status_id
+    columns:
+      - name: exam_ready_status_id
+        description: Grain key — same value as int_measureup_exam_ready_status_current.source_id.
+      - name: status
+        description: Current MeasureUp readiness status for this enrollment.
+      - name: last_score
+        description: Nullable when no readiness score is available yet.
