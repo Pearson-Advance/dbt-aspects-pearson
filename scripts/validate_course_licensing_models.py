@@ -52,6 +52,13 @@ ENTITY_AREAS = {
     "instructor": "instructor_assignments",
     "instructor_institution": "instructor_assignments",
     "instructor_class": "instructor_assignments",
+    "event": "events",
+    "event_exception": "events",
+    "class_event": "events",
+    "lti_tool_institution": "lti",
+    "lti_event": "lti",
+    "lti_external_config_extension": "lti",
+    "bulk_user_register_task": "bulk_registration",
 }
 
 # One models/unit-tests YAML pair per functional area (not per entity, since
@@ -63,6 +70,9 @@ MODEL_YAML_FILES = [
     CORE_ROOT / "enrollments/_enrollments__models.yml",
     CORE_ROOT / "courses/_courses__models.yml",
     CORE_ROOT / "instructor_assignments/_instructor_assignments__models.yml",
+    CORE_ROOT / "events/_events__models.yml",
+    CORE_ROOT / "lti/_lti__models.yml",
+    CORE_ROOT / "bulk_registration/_bulk_registration__models.yml",
 ]
 UNIT_TEST_YAML_FILES = [
     CORE_ROOT / "institutions/_institutions__unit_tests.yml",
@@ -71,6 +81,9 @@ UNIT_TEST_YAML_FILES = [
     CORE_ROOT / "enrollments/_enrollments__unit_tests.yml",
     CORE_ROOT / "courses/_courses__unit_tests.yml",
     CORE_ROOT / "instructor_assignments/_instructor_assignments__unit_tests.yml",
+    CORE_ROOT / "events/_events__unit_tests.yml",
+    CORE_ROOT / "lti/_lti__unit_tests.yml",
+    CORE_ROOT / "bulk_registration/_bulk_registration__unit_tests.yml",
 ]
 
 # Business-level models that combine more than one entity and therefore

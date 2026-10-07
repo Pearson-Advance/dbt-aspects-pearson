@@ -1,0 +1,231 @@
+version: 2
+
+models:
+  - name: mv_course_licensing_event_latest_state
+    description: >
+      Incrementally maintained argMax aggregate state, one row per source_id,
+      tracking the most recent Event sink event. This is an internal
+      operational model and is not a dashboard-facing projection.
+    columns:
+      - name: source_id
+        description: Raw Django primary key of the source Event row.
+        data_tests:
+          - not_null
+      - name: latest_state
+        description: >
+          Opaque argMaxState aggregate finalized by
+          int_course_licensing_event_latest_state.
+
+  - name: int_course_licensing_event_latest_state
+    description: >
+      One finalized latest UPSERT or DELETE event per Event source_id.
+      Tombstones remain present here and are filtered only by the current view.
+    columns:
+      - name: source_id
+        description: Raw Django primary key of the source Event row.
+        data_tests:
+          - unique
+          - not_null
+      - name: is_deleted
+        description: Sink tombstone flag stored as 'True'/'False'.
+        data_tests:
+          - accepted_values:
+              values: ["True", "False"]
+      - name: time_last_dumped
+        description: Primary per-record latest-event ordering timestamp supplied by the sink.
+      - name: source_updated_at
+        description: Source-side timestamp supplied by the serializer, including related-event or fallback timestamps.
+      - name: sink_event_id
+        description: Final deterministic tie-breaker for latest-event ordering.
+  - name: int_course_licensing_event_current
+    description: >
+      Internal current-state representation of Event, exactly one row per
+      source_id whose latest sink event is not a DELETE. Restricted operational
+      fields remain internal; dashboard-facing projections are separate scope.
+    data_tests:
+      - course_licensing_current_matches_latest_event:
+          source_name: course_licensing_event_sink
+          source_table: course_licensing_event
+    columns:
+      - name: source_id
+        description: Raw Django primary key of the source Event row.
+        data_tests:
+          - unique
+          - not_null
+      - name: user_id
+        description: Source user identifier for the event owner.
+        data_tests:
+          - not_null
+      - name: username
+        description: Restricted personal information; internal operational use only.
+      - name: user_email
+        description: Restricted personal information; internal operational use only.
+      - name: description
+        description: Potentially sensitive user-provided event text; internal operational use only.
+      - name: recurrence
+        description: Recurrence definition exactly as supplied by the source; recurring events are not expanded into occurrences.
+      - name: recurrence_end
+        description: Optional end timestamp for the recurrence definition.
+      - name: is_deleted
+        description: Always 'False' in the current model by construction.
+        data_tests:
+          - accepted_values:
+              values: ["False"]
+  - name: mv_course_licensing_event_exception_latest_state
+    description: >
+      Incrementally maintained argMax aggregate state, one row per source_id,
+      tracking the most recent EventException sink event. This is an internal
+      operational model and is not a dashboard-facing projection.
+    columns:
+      - name: source_id
+        description: Raw Django primary key of the source EventException row.
+        data_tests:
+          - not_null
+      - name: latest_state
+        description: >
+          Opaque argMaxState aggregate finalized by
+          int_course_licensing_event_exception_latest_state.
+
+  - name: int_course_licensing_event_exception_latest_state
+    description: >
+      One finalized latest UPSERT or DELETE event per EventException source_id.
+      Tombstones remain present here and are filtered only by the current view.
+    columns:
+      - name: source_id
+        description: Raw Django primary key of the source EventException row.
+        data_tests:
+          - unique
+          - not_null
+      - name: is_deleted
+        description: Sink tombstone flag stored as 'True'/'False'.
+        data_tests:
+          - accepted_values:
+              values: ["True", "False"]
+      - name: time_last_dumped
+        description: Primary per-record latest-event ordering timestamp supplied by the sink.
+      - name: source_updated_at
+        description: Source-side timestamp supplied by the serializer, including related-event or fallback timestamps.
+      - name: sink_event_id
+        description: Final deterministic tie-breaker for latest-event ordering.
+  - name: int_course_licensing_event_exception_current
+    description: >
+      Internal current-state representation of EventException, exactly one row per
+      source_id whose latest sink event is not a DELETE. Restricted operational
+      fields remain internal; dashboard-facing projections are separate scope.
+    data_tests:
+      - course_licensing_current_matches_latest_event:
+          source_name: course_licensing_event_sink
+          source_table: course_licensing_event_exception
+    columns:
+      - name: source_id
+        description: Raw Django primary key of the source EventException row.
+        data_tests:
+          - unique
+          - not_null
+      - name: event_id
+        description: Parent Event source_id.
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('int_course_licensing_event_current')
+              field: source_id
+              config:
+                severity: warn
+      - name: exception_is_deleted
+        description: >
+          Business-level recurrence cancellation flag. A live sink row remains
+          current even when this value is 'True'; only envelope is_deleted
+          removes the record from the current view.
+      - name: title
+        description: Optional exception title; may be null.
+      - name: start
+        description: Optional overridden start timestamp; may be null.
+      - name: end
+        description: Optional overridden end timestamp; may be null.
+      - name: event_type
+        description: Optional overridden event type; may be null.
+      - name: is_deleted
+        description: Always 'False' in the current model by construction.
+        data_tests:
+          - accepted_values:
+              values: ["False"]
+  - name: mv_course_licensing_class_event_latest_state
+    description: >
+      Incrementally maintained argMax aggregate state, one row per source_id,
+      tracking the most recent ClassEvent sink event. This is an internal
+      operational model and is not a dashboard-facing projection.
+    columns:
+      - name: source_id
+        description: Raw Django primary key of the source ClassEvent row.
+        data_tests:
+          - not_null
+      - name: latest_state
+        description: >
+          Opaque argMaxState aggregate finalized by
+          int_course_licensing_class_event_latest_state.
+
+  - name: int_course_licensing_class_event_latest_state
+    description: >
+      One finalized latest UPSERT or DELETE event per ClassEvent source_id.
+      Tombstones remain present here and are filtered only by the current view.
+    columns:
+      - name: source_id
+        description: Raw Django primary key of the source ClassEvent row.
+        data_tests:
+          - unique
+          - not_null
+      - name: is_deleted
+        description: Sink tombstone flag stored as 'True'/'False'.
+        data_tests:
+          - accepted_values:
+              values: ["True", "False"]
+      - name: time_last_dumped
+        description: Primary per-record latest-event ordering timestamp supplied by the sink.
+      - name: source_updated_at
+        description: Source-side timestamp supplied by the serializer, including related-event or fallback timestamps.
+      - name: sink_event_id
+        description: Final deterministic tie-breaker for latest-event ordering.
+  - name: int_course_licensing_class_event_current
+    description: >
+      Internal current-state representation of ClassEvent, exactly one row per
+      source_id whose latest sink event is not a DELETE. Restricted operational
+      fields remain internal; dashboard-facing projections are separate scope.
+    data_tests:
+      - course_licensing_current_matches_latest_event:
+          source_name: course_licensing_event_sink
+          source_table: course_licensing_class_event
+    columns:
+      - name: source_id
+        description: Raw Django primary key of the source ClassEvent row.
+        data_tests:
+          - unique
+          - not_null
+      - name: event_id
+        description: Parent Event source_id.
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('int_course_licensing_event_current')
+              field: source_id
+              config:
+                severity: warn
+      - name: institution_ccx_id
+        description: Parent InstitutionCCX source_id.
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('int_course_licensing_institution_ccx_current')
+              field: source_id
+              config:
+                severity: warn
+      - name: institution_id
+        description: Denormalized institution identifier preserved from the sink; no duplicate ownership relationship test is added.
+      - name: license_id
+        description: Optional denormalized license identifier preserved from the sink.
+      - name: master_course_id
+        description: Optional parent master course key preserved from the sink.
+      - name: is_deleted
+        description: Always 'False' in the current model by construction.
+        data_tests:
+          - accepted_values:
+              values: ["False"]

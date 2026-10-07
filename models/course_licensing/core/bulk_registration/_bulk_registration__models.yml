@@ -1,0 +1,69 @@
+version: 2
+
+models:
+  - name: mv_course_licensing_bulk_user_register_task_latest_state
+    description: >
+      Incrementally maintained argMax aggregate state, one row per source_id,
+      tracking the most recent BulkUserRegisterTask sink event. This is an internal
+      operational model and is not a dashboard-facing projection.
+    columns:
+      - name: source_id
+        description: UUID primary key of the source BulkUserRegisterTask row.
+        data_tests:
+          - not_null
+      - name: latest_state
+        description: >
+          Opaque argMaxState aggregate finalized by
+          int_course_licensing_bulk_user_register_task_latest_state.
+
+  - name: int_course_licensing_bulk_user_register_task_latest_state
+    description: >
+      One finalized latest UPSERT or DELETE event per BulkUserRegisterTask source_id.
+      Tombstones remain present here and are filtered only by the current view.
+    columns:
+      - name: source_id
+        description: UUID primary key of the source BulkUserRegisterTask row.
+        data_tests:
+          - unique
+          - not_null
+      - name: is_deleted
+        description: Sink tombstone flag stored as 'True'/'False'.
+        data_tests:
+          - accepted_values:
+              values: ["True", "False"]
+      - name: time_last_dumped
+        description: Primary per-record latest-event ordering timestamp supplied by the sink.
+      - name: source_updated_at
+        description: Source-side timestamp supplied by the serializer, including related-event or fallback timestamps.
+      - name: sink_event_id
+        description: Final deterministic tie-breaker for latest-event ordering.
+  - name: int_course_licensing_bulk_user_register_task_current
+    description: >
+      Internal current-state representation of BulkUserRegisterTask, exactly one row per
+      source_id whose latest sink event is not a DELETE. Restricted operational
+      fields remain internal; dashboard-facing projections are separate scope.
+    data_tests:
+      - course_licensing_current_matches_latest_event:
+          source_name: course_licensing_event_sink
+          source_table: course_licensing_bulk_user_register_task
+    columns:
+      - name: source_id
+        description: UUID primary key of the source BulkUserRegisterTask row.
+        data_tests:
+          - unique
+          - not_null
+      - name: status
+        description: Current bulk-registration task status.
+        data_tests:
+          - not_null
+      - name: filename
+        description: Optional restricted operational filename; may be null or blank.
+      - name: errors
+        description: Restricted nullable JSON error payload from bulk registration.
+        data_tests:
+          - course_licensing_valid_json
+      - name: is_deleted
+        description: Always 'False' in the current model by construction.
+        data_tests:
+          - accepted_values:
+              values: ["False"]
