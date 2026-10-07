@@ -305,3 +305,158 @@
         )
     }}
 {% endmacro %}
+
+{% macro course_licensing_event_columns() %}
+    {{
+        return(
+            [
+                "created",
+                "modified",
+                "user_id",
+                "username",
+                "user_email",
+                "description",
+                "title",
+                "start",
+                "end",
+                "availability",
+                "event_type",
+                "recurrence",
+                "recurrence_end",
+                "is_class",
+                "operation",
+                "is_deleted",
+                "source_updated_at",
+                "time_last_dumped",
+                "dump_id",
+                "sink_event_id",
+                "schema_version",
+            ]
+        )
+    }}
+{% endmacro %}
+
+{% macro course_licensing_event_exception_columns() %}
+    {{
+        return(
+            [
+                "event_id",
+                "title",
+                "start",
+                "end",
+                "event_type",
+                "exception_is_deleted",
+                "original_start",
+                "operation",
+                "is_deleted",
+                "source_updated_at",
+                "time_last_dumped",
+                "dump_id",
+                "sink_event_id",
+                "schema_version",
+            ]
+        )
+    }}
+{% endmacro %}
+
+{% macro course_licensing_class_event_columns() %}
+    {{
+        return(
+            [
+                "event_id",
+                "institution_ccx_id",
+                "institution_id",
+                "license_id",
+                "class_id",
+                "master_course_id",
+                "operation",
+                "is_deleted",
+                "source_updated_at",
+                "time_last_dumped",
+                "dump_id",
+                "sink_event_id",
+                "schema_version",
+            ]
+        )
+    }}
+{% endmacro %}
+
+{% macro course_licensing_lti_tool_institution_columns() %}
+    {{
+        return(
+            [
+                "lti1p3_tool_id",
+                "institution_id",
+                "institution_name",
+                "operation",
+                "is_deleted",
+                "source_updated_at",
+                "time_last_dumped",
+                "dump_id",
+                "sink_event_id",
+                "schema_version",
+            ]
+        )
+    }}
+{% endmacro %}
+
+{% macro course_licensing_lti_event_columns() %}
+    {{
+        return(
+            [
+                "course_enrollment_id",
+                "user_id",
+                "username",
+                "user_email",
+                "course_id",
+                "block_id",
+                "last_launch_attempt_date",
+                "resource_link_id",
+                "operation",
+                "is_deleted",
+                "source_updated_at",
+                "time_last_dumped",
+                "dump_id",
+                "sink_event_id",
+                "schema_version",
+            ]
+        )
+    }}
+{% endmacro %}
+
+{% macro course_licensing_lti_external_config_extension_columns() %}
+    {{
+        return(
+            [
+                "config_id",
+                "custom_parameters",
+                "operation",
+                "is_deleted",
+                "source_updated_at",
+                "time_last_dumped",
+                "dump_id",
+                "sink_event_id",
+                "schema_version",
+            ]
+        )
+    }}
+{% endmacro %}
+
+{% macro course_licensing_bulk_user_register_task_columns() %}
+    {{
+        return(
+            [
+                "status",
+                "filename",
+                "errors",
+                "operation",
+                "is_deleted",
+                "source_updated_at",
+                "time_last_dumped",
+                "dump_id",
+                "sink_event_id",
+                "schema_version",
+            ]
+        )
+    }}
+{% endmacro %}

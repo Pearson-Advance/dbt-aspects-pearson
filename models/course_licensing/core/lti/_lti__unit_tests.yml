@@ -1,0 +1,118 @@
+unit_tests:
+  - name: test_course_licensing_lti_tool_institution_current_filters_tombstones
+    model: int_course_licensing_lti_tool_institution_current
+    given:
+      - input: ref("int_course_licensing_lti_tool_institution_latest_state")
+        format: sql
+        rows: |
+          select
+              '301' as source_id, '51' as lti1p3_tool_id, '7' as institution_id,
+              'Institution A' as institution_name, 'UPSERT' as operation, 'False' as is_deleted,
+              '2026-01-01 00:00:00.000000+00:00' as source_updated_at,
+              '2026-01-01 00:00:01.000000+00:00' as time_last_dumped,
+              toUUID('11111111-1111-1111-1111-111111111141') as dump_id,
+              toUUID('22222222-2222-2222-2222-222222222241') as sink_event_id, '2' as schema_version
+          union all
+          select
+              '302', '52', '8', 'Institution B', 'DELETE', 'True',
+              '2026-01-01 01:00:00.000000+00:00', '2026-01-01 01:00:01.000000+00:00',
+              toUUID('11111111-1111-1111-1111-111111111142'),
+              toUUID('22222222-2222-2222-2222-222222222242'), '2'
+    expect:
+      format: sql
+      rows: |
+        select
+            '301' as source_id, '51' as lti1p3_tool_id, '7' as institution_id,
+            'Institution A' as institution_name, 'UPSERT' as operation, 'False' as is_deleted,
+            '2026-01-01 00:00:00.000000+00:00' as source_updated_at,
+            '2026-01-01 00:00:01.000000+00:00' as time_last_dumped,
+            toUUID('11111111-1111-1111-1111-111111111141') as dump_id,
+            toUUID('22222222-2222-2222-2222-222222222241') as sink_event_id, '2' as schema_version
+
+  - name: test_course_licensing_lti_event_current_keeps_distinct_source_records
+    model: int_course_licensing_lti_event_current
+    given:
+      - input: ref("int_course_licensing_lti_event_latest_state")
+        format: sql
+        rows: |
+          select
+              '401' as source_id, '900' as course_enrollment_id, '10' as user_id,
+              'learner' as username, 'learner@example.com' as user_email,
+              'course-v1:Test+LTI+1' as course_id, 'block-v1:Test+LTI+1+type@lti+block@tool' as block_id,
+              '2026-01-05T10:00:00Z' as last_launch_attempt_date,
+              cast(null as Nullable(String)) as resource_link_id,
+              'UPSERT' as operation, 'False' as is_deleted,
+              '2026-01-05 10:00:00.000000+00:00' as source_updated_at,
+              '2026-01-05 10:00:01.000000+00:00' as time_last_dumped,
+              toUUID('11111111-1111-1111-1111-111111111151') as dump_id,
+              toUUID('22222222-2222-2222-2222-222222222251') as sink_event_id, '2' as schema_version
+          union all
+          select
+              '402', '900', '10', 'learner', 'learner@example.com', 'course-v1:Test+LTI+1',
+              'block-v1:Test+LTI+1+type@lti+block@tool', '2026-01-05T11:00:00Z', 'resource-link-2',
+              'UPSERT', 'False', '2026-01-05 11:00:00.000000+00:00',
+              '2026-01-05 11:00:01.000000+00:00',
+              toUUID('11111111-1111-1111-1111-111111111152'),
+              toUUID('22222222-2222-2222-2222-222222222252'), '2'
+          union all
+          select
+              '403', '901', '11', 'removed', 'removed@example.com', 'course-v1:Test+LTI+1',
+              'block-v1:Test+LTI+1+type@lti+block@tool', '2026-01-05T12:00:00Z', 'resource-link-3',
+              'DELETE', 'True', '2026-01-05 12:00:00.000000+00:00',
+              '2026-01-05 12:00:01.000000+00:00',
+              toUUID('11111111-1111-1111-1111-111111111153'),
+              toUUID('22222222-2222-2222-2222-222222222253'), '2'
+    expect:
+      format: sql
+      rows: |
+        select
+            '401' as source_id, '900' as course_enrollment_id, '10' as user_id,
+            'learner' as username, 'learner@example.com' as user_email,
+            'course-v1:Test+LTI+1' as course_id, 'block-v1:Test+LTI+1+type@lti+block@tool' as block_id,
+            '2026-01-05T10:00:00Z' as last_launch_attempt_date,
+            cast(null as Nullable(String)) as resource_link_id,
+            'UPSERT' as operation, 'False' as is_deleted,
+            '2026-01-05 10:00:00.000000+00:00' as source_updated_at,
+            '2026-01-05 10:00:01.000000+00:00' as time_last_dumped,
+            toUUID('11111111-1111-1111-1111-111111111151') as dump_id,
+            toUUID('22222222-2222-2222-2222-222222222251') as sink_event_id, '2' as schema_version
+        union all
+        select
+            '402', '900', '10', 'learner', 'learner@example.com', 'course-v1:Test+LTI+1',
+            'block-v1:Test+LTI+1+type@lti+block@tool', '2026-01-05T11:00:00Z', 'resource-link-2',
+            'UPSERT', 'False', '2026-01-05 11:00:00.000000+00:00',
+            '2026-01-05 11:00:01.000000+00:00',
+            toUUID('11111111-1111-1111-1111-111111111152'),
+            toUUID('22222222-2222-2222-2222-222222222252'), '2'
+
+  - name: test_course_licensing_lti_external_config_extension_current_filters_tombstones
+    model: int_course_licensing_lti_external_config_extension_current
+    given:
+      - input: ref("int_course_licensing_lti_external_config_extension_latest_state")
+        format: sql
+        rows: |
+          select
+              '501' as source_id, 'config-1' as config_id,
+              cast(null as Nullable(String)) as custom_parameters,
+              'UPSERT' as operation, 'False' as is_deleted,
+              '2026-01-01 00:00:00.000000+00:00' as source_updated_at,
+              '2026-01-01 00:00:01.000000+00:00' as time_last_dumped,
+              toUUID('11111111-1111-1111-1111-111111111161') as dump_id,
+              toUUID('22222222-2222-2222-2222-222222222261') as sink_event_id, '2' as schema_version
+          union all
+          select
+              '502', 'config-2', 'key=value', 'DELETE', 'True',
+              '2026-01-01 01:00:00.000000+00:00', '2026-01-01 01:00:01.000000+00:00',
+              toUUID('11111111-1111-1111-1111-111111111162'),
+              toUUID('22222222-2222-2222-2222-222222222262'), '2'
+    expect:
+      format: sql
+      rows: |
+        select
+            '501' as source_id, 'config-1' as config_id,
+            cast(null as Nullable(String)) as custom_parameters,
+            'UPSERT' as operation, 'False' as is_deleted,
+            '2026-01-01 00:00:00.000000+00:00' as source_updated_at,
+            '2026-01-01 00:00:01.000000+00:00' as time_last_dumped,
+            toUUID('11111111-1111-1111-1111-111111111161') as dump_id,
+            toUUID('22222222-2222-2222-2222-222222222261') as sink_event_id, '2' as schema_version

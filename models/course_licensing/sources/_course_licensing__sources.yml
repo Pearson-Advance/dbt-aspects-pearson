@@ -301,3 +301,158 @@ sources:
           - name: dump_id
           - name: sink_event_id
           - name: schema_version
+
+      - name: course_licensing_event
+        description: >
+          Append-only history of institution calendar Event records, including recurrence metadata and restricted personal information.
+          One row is emitted per UPSERT or DELETE sink event; current state is
+          resolved downstream per source_id.
+        loaded_at_field: time_last_dumped
+        columns:
+          - name: source_id
+          - name: created
+          - name: modified
+          - name: user_id
+          - name: username
+          - name: user_email
+          - name: description
+          - name: title
+          - name: start
+          - name: end
+          - name: availability
+          - name: event_type
+          - name: recurrence
+          - name: recurrence_end
+          - name: is_class
+          - name: operation
+          - name: is_deleted
+          - name: source_updated_at
+          - name: time_last_dumped
+          - name: dump_id
+          - name: sink_event_id
+          - name: schema_version
+
+      - name: course_licensing_event_exception
+        description: >
+          Append-only history of recurrent-event exceptions. exception_is_deleted is business state and is independent from the sink tombstone flag is_deleted.
+          One row is emitted per UPSERT or DELETE sink event; current state is
+          resolved downstream per source_id.
+        loaded_at_field: time_last_dumped
+        columns:
+          - name: source_id
+          - name: event_id
+          - name: title
+          - name: start
+          - name: end
+          - name: event_type
+          - name: exception_is_deleted
+          - name: original_start
+          - name: operation
+          - name: is_deleted
+          - name: source_updated_at
+          - name: time_last_dumped
+          - name: dump_id
+          - name: sink_event_id
+          - name: schema_version
+
+      - name: course_licensing_class_event
+        description: >
+          Append-only history of ClassEvent relationships between calendar events and InstitutionCCX classes.
+          One row is emitted per UPSERT or DELETE sink event; current state is
+          resolved downstream per source_id.
+        loaded_at_field: time_last_dumped
+        columns:
+          - name: source_id
+          - name: event_id
+          - name: institution_ccx_id
+          - name: institution_id
+          - name: license_id
+          - name: class_id
+          - name: master_course_id
+          - name: operation
+          - name: is_deleted
+          - name: source_updated_at
+          - name: time_last_dumped
+          - name: dump_id
+          - name: sink_event_id
+          - name: schema_version
+
+      - name: course_licensing_lti_tool_institution
+        description: >
+          Append-only history of LTIToolInstitution ownership records for institution LTI configuration.
+          One row is emitted per UPSERT or DELETE sink event; current state is
+          resolved downstream per source_id.
+        loaded_at_field: time_last_dumped
+        columns:
+          - name: source_id
+          - name: lti1p3_tool_id
+          - name: institution_id
+          - name: institution_name
+          - name: operation
+          - name: is_deleted
+          - name: source_updated_at
+          - name: time_last_dumped
+          - name: dump_id
+          - name: sink_event_id
+          - name: schema_version
+
+      - name: course_licensing_lti_event
+        description: >
+          Append-only history of LTIEvent operational records, including restricted learner identity and launch context.
+          One row is emitted per UPSERT or DELETE sink event; current state is
+          resolved downstream per source_id.
+        loaded_at_field: time_last_dumped
+        columns:
+          - name: source_id
+          - name: course_enrollment_id
+          - name: user_id
+          - name: username
+          - name: user_email
+          - name: course_id
+          - name: block_id
+          - name: last_launch_attempt_date
+          - name: resource_link_id
+          - name: operation
+          - name: is_deleted
+          - name: source_updated_at
+          - name: time_last_dumped
+          - name: dump_id
+          - name: sink_event_id
+          - name: schema_version
+
+      - name: course_licensing_lti_external_config_extension
+        description: >
+          Append-only history of LTIExternalConfigExtension operational configuration payloads. Configuration data is restricted.
+          One row is emitted per UPSERT or DELETE sink event; current state is
+          resolved downstream per source_id.
+        loaded_at_field: time_last_dumped
+        columns:
+          - name: source_id
+          - name: config_id
+          - name: custom_parameters
+          - name: operation
+          - name: is_deleted
+          - name: source_updated_at
+          - name: time_last_dumped
+          - name: dump_id
+          - name: sink_event_id
+          - name: schema_version
+
+      - name: course_licensing_bulk_user_register_task
+        description: >
+          Append-only history of UUID-keyed BulkUserRegisterTask operational state. Filenames and error payloads are restricted operational data.
+          One row is emitted per UPSERT or DELETE sink event; current state is
+          resolved downstream per source_id.
+        loaded_at_field: time_last_dumped
+        columns:
+          - name: source_id
+          - name: status
+          - name: filename
+          - name: errors
+          - name: operation
+          - name: is_deleted
+          - name: source_updated_at
+          - name: time_last_dumped
+          - name: dump_id
+          - name: sink_event_id
+          - name: schema_version

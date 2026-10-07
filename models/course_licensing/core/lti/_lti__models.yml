@@ -1,0 +1,216 @@
+version: 2
+
+models:
+  - name: mv_course_licensing_lti_tool_institution_latest_state
+    description: >
+      Incrementally maintained argMax aggregate state, one row per source_id,
+      tracking the most recent LTIToolInstitution sink event. This is an internal
+      operational model and is not a dashboard-facing projection.
+    columns:
+      - name: source_id
+        description: Raw Django primary key of the source LTIToolInstitution row.
+        data_tests:
+          - not_null
+      - name: latest_state
+        description: >
+          Opaque argMaxState aggregate finalized by
+          int_course_licensing_lti_tool_institution_latest_state.
+
+  - name: int_course_licensing_lti_tool_institution_latest_state
+    description: >
+      One finalized latest UPSERT or DELETE event per LTIToolInstitution source_id.
+      Tombstones remain present here and are filtered only by the current view.
+    columns:
+      - name: source_id
+        description: Raw Django primary key of the source LTIToolInstitution row.
+        data_tests:
+          - unique
+          - not_null
+      - name: is_deleted
+        description: Sink tombstone flag stored as 'True'/'False'.
+        data_tests:
+          - accepted_values:
+              values: ["True", "False"]
+      - name: time_last_dumped
+        description: Primary per-record latest-event ordering timestamp supplied by the sink.
+      - name: source_updated_at
+        description: Source-side timestamp supplied by the serializer, including related-event or fallback timestamps.
+      - name: sink_event_id
+        description: Final deterministic tie-breaker for latest-event ordering.
+  - name: int_course_licensing_lti_tool_institution_current
+    description: >
+      Internal current-state representation of LTIToolInstitution, exactly one row per
+      source_id whose latest sink event is not a DELETE. Restricted operational
+      fields remain internal; dashboard-facing projections are separate scope.
+    data_tests:
+      - course_licensing_current_matches_latest_event:
+          source_name: course_licensing_event_sink
+          source_table: course_licensing_lti_tool_institution
+    columns:
+      - name: source_id
+        description: Raw Django primary key of the source LTIToolInstitution row.
+        data_tests:
+          - unique
+          - not_null
+      - name: lti1p3_tool_id
+        description: Source LTI 1.3 tool identifier.
+        data_tests:
+          - not_null
+      - name: institution_id
+        description: Parent Institution source_id.
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('int_course_licensing_institution_current')
+              field: source_id
+              config:
+                severity: warn
+      - name: institution_name
+        description: Denormalized institution display name preserved exactly from the sink.
+      - name: is_deleted
+        description: Always 'False' in the current model by construction.
+        data_tests:
+          - accepted_values:
+              values: ["False"]
+  - name: mv_course_licensing_lti_event_latest_state
+    description: >
+      Incrementally maintained argMax aggregate state, one row per source_id,
+      tracking the most recent LTIEvent sink event. This is an internal
+      operational model and is not a dashboard-facing projection.
+    columns:
+      - name: source_id
+        description: Raw Django primary key of the source LTIEvent row.
+        data_tests:
+          - not_null
+      - name: latest_state
+        description: >
+          Opaque argMaxState aggregate finalized by
+          int_course_licensing_lti_event_latest_state.
+
+  - name: int_course_licensing_lti_event_latest_state
+    description: >
+      One finalized latest UPSERT or DELETE event per LTIEvent source_id.
+      Tombstones remain present here and are filtered only by the current view.
+    columns:
+      - name: source_id
+        description: Raw Django primary key of the source LTIEvent row.
+        data_tests:
+          - unique
+          - not_null
+      - name: is_deleted
+        description: Sink tombstone flag stored as 'True'/'False'.
+        data_tests:
+          - accepted_values:
+              values: ["True", "False"]
+      - name: time_last_dumped
+        description: Primary per-record latest-event ordering timestamp supplied by the sink.
+      - name: source_updated_at
+        description: Source-side timestamp supplied by the serializer, including related-event or fallback timestamps.
+      - name: sink_event_id
+        description: Final deterministic tie-breaker for latest-event ordering.
+  - name: int_course_licensing_lti_event_current
+    description: >
+      Internal current-state representation of LTIEvent, exactly one row per
+      source_id whose latest sink event is not a DELETE. Restricted operational
+      fields remain internal; dashboard-facing projections are separate scope.
+    data_tests:
+      - course_licensing_current_matches_latest_event:
+          source_name: course_licensing_event_sink
+          source_table: course_licensing_lti_event
+    columns:
+      - name: source_id
+        description: Raw Django primary key of the source LTIEvent row.
+        data_tests:
+          - unique
+          - not_null
+      - name: course_enrollment_id
+        description: Source enrollment identifier associated with this LTI operational record.
+        data_tests:
+          - not_null
+      - name: user_id
+        description: Restricted learner identifier preserved from the sink.
+        data_tests:
+          - not_null
+      - name: username
+        description: Restricted personal information; internal operational use only.
+      - name: user_email
+        description: Restricted personal information; internal operational use only.
+      - name: course_id
+        description: Open edX course key preserved exactly from the sink.
+        data_tests:
+          - not_null
+      - name: block_id
+        description: LTI block identifier preserved exactly from the sink.
+        data_tests:
+          - not_null
+      - name: resource_link_id
+        description: Optional LTI resource-link identifier; may be null.
+      - name: last_launch_attempt_date
+        description: Last-launch timestamp supplied by the source and used by the serializer as source_updated_at.
+      - name: is_deleted
+        description: Always 'False' in the current model by construction.
+        data_tests:
+          - accepted_values:
+              values: ["False"]
+  - name: mv_course_licensing_lti_external_config_extension_latest_state
+    description: >
+      Incrementally maintained argMax aggregate state, one row per source_id,
+      tracking the most recent LTIExternalConfigExtension sink event. This is an internal
+      operational model and is not a dashboard-facing projection.
+    columns:
+      - name: source_id
+        description: Raw Django primary key of the source LTIExternalConfigExtension row.
+        data_tests:
+          - not_null
+      - name: latest_state
+        description: >
+          Opaque argMaxState aggregate finalized by
+          int_course_licensing_lti_external_config_extension_latest_state.
+
+  - name: int_course_licensing_lti_external_config_extension_latest_state
+    description: >
+      One finalized latest UPSERT or DELETE event per LTIExternalConfigExtension source_id.
+      Tombstones remain present here and are filtered only by the current view.
+    columns:
+      - name: source_id
+        description: Raw Django primary key of the source LTIExternalConfigExtension row.
+        data_tests:
+          - unique
+          - not_null
+      - name: is_deleted
+        description: Sink tombstone flag stored as 'True'/'False'.
+        data_tests:
+          - accepted_values:
+              values: ["True", "False"]
+      - name: time_last_dumped
+        description: Primary per-record latest-event ordering timestamp supplied by the sink.
+      - name: source_updated_at
+        description: Source-side timestamp supplied by the serializer, including related-event or fallback timestamps.
+      - name: sink_event_id
+        description: Final deterministic tie-breaker for latest-event ordering.
+  - name: int_course_licensing_lti_external_config_extension_current
+    description: >
+      Internal current-state representation of LTIExternalConfigExtension, exactly one row per
+      source_id whose latest sink event is not a DELETE. Restricted operational
+      fields remain internal; dashboard-facing projections are separate scope.
+    data_tests:
+      - course_licensing_current_matches_latest_event:
+          source_name: course_licensing_event_sink
+          source_table: course_licensing_lti_external_config_extension
+    columns:
+      - name: source_id
+        description: Raw Django primary key of the source LTIExternalConfigExtension row.
+        data_tests:
+          - unique
+          - not_null
+      - name: config_id
+        description: External LTI configuration identifier preserved exactly from the sink.
+        data_tests:
+          - not_null
+      - name: custom_parameters
+        description: Restricted operational LTI configuration payload; may be null or blank and is not dashboard-facing.
+      - name: is_deleted
+        description: Always 'False' in the current model by construction.
+        data_tests:
+          - accepted_values:
+              values: ["False"]
