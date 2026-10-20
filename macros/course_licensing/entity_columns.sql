@@ -153,6 +153,7 @@
                 "license_status",
                 "user_id",
                 "student",
+                "student_name",
                 "student_email",
                 "class_name",
                 "class_id",

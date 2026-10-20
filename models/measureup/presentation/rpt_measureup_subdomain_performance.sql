@@ -12,6 +12,11 @@
     attempt_subdomain only carries attempt_domain_id, not exam_attempt_id
     directly — attempt_domain is the hop back to the attempt/context, not
     just a name lookup here. Every join is FK-to-source_id, at most 1:1.
+
+    Only results of attempts classified as 'student' are kept, the same
+    rule as every other presentation view, so a report built on this
+    model never mixes in instructor or administrator launches. A result
+    whose chain does not reach an attempt in the mart is dropped too.
 #}
 select
     attempt_subdomain.source_id as attempt_subdomain_id,
@@ -43,3 +48,4 @@ left join
 left join
     {{ ref("mart_measureup_attempt_context") }} as mart
     on attempt_domain.exam_attempt_id = mart.exam_attempt_id
+where mart.attempt_user_type = 'student'

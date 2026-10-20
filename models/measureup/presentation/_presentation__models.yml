@@ -3,9 +3,19 @@ version: 2
 models:
   - name: rpt_measureup_attempts
     description: >
-      Dashboard-ready grain: one row per current exam attempt. Built on
-      mart_measureup_attempt_context — test version, LTI context, and
-      licensed-class ownership are already resolved there.
+      Dashboard-ready grain: one row per current student exam attempt.
+      Built on mart_measureup_attempt_context — test version, LTI context,
+      licensed-class ownership and attempt_user_type are already resolved
+      there. Only attempts with attempt_user_type = 'student' are kept;
+      instructor, administrator and other launches stay in the mart only.
+
+      Materialized as a refreshable materialized view refreshed every 4
+      hours: dashboards read a stored result that can be up to 4 hours
+      old. Ordered by (institution_id, lti_course_id,
+      attempt_initiated_datetime, ...) so institution and class filters,
+      including row-level security, read only their own rows.
+      Adding a column or changing the ordering needs a --full-refresh of
+      this model.
 
 
       Completion rule: an attempt is only "completed" when flow_state
@@ -32,6 +42,15 @@ models:
     columns:
       - name: exam_attempt_id
         description: Grain key — same value as int_measureup_exam_test_attempt_current.source_id.
+      - name: attempt_initiated_at
+        description: >
+          attempt_initiated_datetime converted to DateTime64(6, 'UTC') once
+          per refresh. Prefer this over parsing the text column. NULL when
+          the text is empty or not a timestamp.
+      - name: attempt_finished_at
+        description: >
+          attempt_finished_datetime converted to DateTime64(6, 'UTC') once
+          per refresh. NULL for attempts that have not finished.
       - name: exam_test_id
         description: >
           Exact MeasureUp test-version source_id attempted. Never collapse
@@ -55,14 +74,36 @@ models:
           course_licensing Institution owning this attempt's class, when
           has_licensed_class_context is true. Empty string, not NULL, when
           false — see mart_measureup_attempt_context's header for why.
+      - name: class_name
+        description: >
+          Display name of the licensed class. Not guaranteed unique — use
+          lti_course_id to identify a class.
+      - name: student_name
+        description: >
+          The learner's profile name from the licensed enrollment, falling
+          back to the username when the profile name is empty. This is the
+          column dashboards show.
+      - name: student_username
+        description: >
+          The learner's username from the licensed enrollment. Kept for
+          data checks, such as finding learners without a profile name;
+          not meant to be shown on dashboards.
+      - name: correct
+        description: Number of question results with a score of 1 for this attempt.
+      - name: total
+        description: >
+          Number of question results for this attempt, including those with
+          no score. MeasureUp's final_score counts a question with no score
+          as incorrect, so correct / total matches final_score.
 
   - name: rpt_measureup_domain_performance
     description: >
       Dashboard-ready grain: one row per current attempt-domain result.
       Both joins (to the domain dimension and to the attempt context) are
-      foreign-key-to-source_id, at most 1:1 — verified against real data
-      that row count equals int_measureup_exam_attempt_domain_current
-      exactly, with no inflation.
+      foreign-key-to-source_id, at most 1:1, so they cannot inflate rows.
+      Only results of attempts with attempt_user_type = 'student' are
+      kept, so row count equals the student share of
+      int_measureup_exam_attempt_domain_current, not all of it.
 
 
       average_score is the domain-level average exactly as emitted by the
@@ -90,8 +131,10 @@ models:
       exam_attempt_id directly — the join chain passes through
       int_measureup_exam_attempt_domain_current to reach the attempt and
       its resolved context. Every join is foreign-key-to-source_id, at
-      most 1:1 — verified against real data that row count equals
-      int_measureup_exam_attempt_subdomain_current exactly.
+      most 1:1, so they cannot inflate rows. Only results of attempts with
+      attempt_user_type = 'student' are kept, so row count equals the
+      student share of int_measureup_exam_attempt_subdomain_current, not
+      all of it.
     data_tests:
       - unique:
           column_name: attempt_subdomain_id
@@ -113,9 +156,20 @@ models:
       the finest grain in this reporting layer. Three hops back to the
       attempt and its resolved context (question_attempt ->
       attempt_subdomain -> attempt_domain -> mart), each
-      foreign-key-to-source_id, at most 1:1 — verified against real data
-      that row count equals int_measureup_exam_question_attempt_current
-      exactly.
+      foreign-key-to-source_id, at most 1:1, plus the domain and subdomain
+      catalog joins for their display names. Only question results of
+      attempts with attempt_user_type = 'student' are kept, so row count
+      equals the student share of int_measureup_exam_question_attempt_current,
+      not all of it. A question whose chain does not reach an attempt is
+      dropped as well, since its learner cannot be classified.
+
+      Materialized as a refreshable materialized view refreshed every 4
+      hours: dashboards read a stored result that can be up to 4 hours
+      old. Ordered by (institution_id, lti_course_id,
+      attempt_initiated_datetime, ...) so institution and class filters,
+      including row-level security, read only their own rows.
+      Adding a column or changing the ordering needs a --full-refresh of
+      this model.
 
 
       score is nullable exactly as emitted by the source — a missing
@@ -135,12 +189,33 @@ models:
     columns:
       - name: question_attempt_id
         description: Grain key — same value as int_measureup_exam_question_attempt_current.source_id.
+      - name: attempt_initiated_at
+        description: >
+          attempt_initiated_datetime converted to DateTime64(6, 'UTC') once
+          per refresh. Prefer this over parsing the text column. NULL when
+          the text is empty or not a timestamp.
+      - name: attempt_finished_at
+        description: >
+          attempt_finished_datetime converted to DateTime64(6, 'UTC') once
+          per refresh. NULL for attempts that have not finished.
       - name: score
         description: >
           Nullable exactly as emitted by the source. Exclude nulls from an
           average rather than treating a missing score as 0.
       - name: exam_attempt_id
         description: Owning attempt's source_id, recovered via attempt_subdomain and attempt_domain.
+      - name: exam_domain_name
+        description: Display name of the exam domain, from int_measureup_exam_domain_current.
+      - name: exam_subdomain_name
+        description: Display name of the exam subdomain, from int_measureup_exam_subdomain_current.
+      - name: lti_course_id
+        description: >
+          Class (CCX) the owning attempt was launched from. Use this, not
+          class_name, to identify a class.
+      - name: class_name
+        description: >
+          Display name of the owning attempt's licensed class. Not
+          guaranteed unique — two classes can share a name.
 
   - name: rpt_measureup_exam_readiness
     description: >

@@ -37,6 +37,17 @@
 
     mup_attempt_configuration (restricted JSON) is deliberately not
     projected here — dashboard-ready views must not expose it.
+
+    attempt_user_type classifies who launched the attempt, because the
+    LTI unit creates an attempt for any role that opens it, not only for
+    students. It is inferred from Course Licensing data, not from the
+    launch's real LTI role, so a staff user with no Course Licensing role
+    falls into 'other'. 'student' is checked first on purpose: a user who
+    is both enrolled in and instructing the same class counts as a
+    student, so a real student is never excluded. This mart keeps every
+    attempt; the presentation models keep only 'student'. Each lookup is
+    grouped to one row per join key, so none of them can multiply attempt
+    rows.
 #}
 select
     attempt.source_id as exam_attempt_id,
@@ -59,7 +70,20 @@ select
     coalesce(institution_ccx.source_id, '') != '' as has_licensed_class_context,
     institution_ccx.source_id as institution_ccx_id,
     institution_ccx.institution_id,
-    institution_ccx.license_id
+    institution_ccx.license_id,
+    institution_ccx.ccx_name as class_name,
+
+    multiIf(
+        coalesce(enrollment.user_id, '') != '',
+        'student',
+        coalesce(class_instructor.user_id, '') != '',
+        'instructor',
+        coalesce(instructor.user_id, '') != '',
+        'instructor',
+        coalesce(administrator.user_id, '') != '',
+        'institution_admin',
+        'other'
+    ) as attempt_user_type
 
 from {{ ref("int_measureup_exam_test_attempt_current") }} as attempt
 left join
@@ -88,8 +112,39 @@ left join
             src.ccx_id as ccx_id,
             max(src.source_id) as source_id,
             argMax(src.institution_id, src.source_id) as institution_id,
-            argMax(src.license_id, src.source_id) as license_id
+            argMax(src.license_id, src.source_id) as license_id,
+            argMax(src.ccx_name, src.source_id) as ccx_name
         from {{ ref("int_course_licensing_institution_ccx_current") }} as src
         group by src.ccx_id
     ) as institution_ccx
     on lti_context.course_id = institution_ccx.ccx_id
+left join
+    (
+        select src.user_id as user_id, src.class_id as class_id
+        from {{ ref("int_course_licensing_licensed_enrollment_current") }} as src
+        group by src.user_id, src.class_id
+    ) as enrollment
+    on lti_context.user_id = enrollment.user_id
+    and lti_context.course_id = enrollment.class_id
+left join
+    (
+        select src.user_id as user_id, src.class_id as class_id
+        from {{ ref("int_course_licensing_instructor_class_current") }} as src
+        group by src.user_id, src.class_id
+    ) as class_instructor
+    on lti_context.user_id = class_instructor.user_id
+    and lti_context.course_id = class_instructor.class_id
+left join
+    (
+        select src.user_id as user_id
+        from {{ ref("int_course_licensing_instructor_current") }} as src
+        group by src.user_id
+    ) as instructor
+    on lti_context.user_id = instructor.user_id
+left join
+    (
+        select src.user_id as user_id
+        from {{ ref("int_course_licensing_institution_administrator_current") }} as src
+        group by src.user_id
+    ) as administrator
+    on lti_context.user_id = administrator.user_id

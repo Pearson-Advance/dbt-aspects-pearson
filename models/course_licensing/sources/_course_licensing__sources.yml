@@ -176,6 +176,7 @@ sources:
           - name: license_status
           - name: user_id
           - name: student
+          - name: student_name
           - name: student_email
           - name: class_name
           - name: class_id
