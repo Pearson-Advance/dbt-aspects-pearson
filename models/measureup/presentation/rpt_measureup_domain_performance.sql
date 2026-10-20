@@ -10,8 +10,12 @@
 {#
     Dashboard-ready grain: one row per current attempt-domain result.
     Both joins are FK-to-source_id, at most 1:1 — cannot multiply
-    attempt_domain rows. Row-count-equals-base is verified independently
-    against real ClickHouse, not just asserted by this join shape.
+    attempt_domain rows.
+
+    Only results of attempts classified as 'student' are kept, the same
+    rule as every other presentation view, so a report built on this
+    model never mixes in instructor or administrator launches. A result
+    whose chain does not reach an attempt in the mart is dropped too.
 #}
 select
     attempt_domain.source_id as attempt_domain_id,
@@ -37,3 +41,4 @@ left join
 left join
     {{ ref("mart_measureup_attempt_context") }} as mart
     on attempt_domain.exam_attempt_id = mart.exam_attempt_id
+where mart.attempt_user_type = 'student'

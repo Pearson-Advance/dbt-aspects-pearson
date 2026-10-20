@@ -1,13 +1,19 @@
 unit_tests:
-  - name: test_rpt_measureup_attempts_passes_through_mart
+  - name: test_rpt_measureup_attempts_resolves_student_results
     description: >
-      rpt_measureup_attempts is a thin projection over
-      mart_measureup_attempt_context — this confirms it passes every
-      relevant column through unchanged, for both a fully-resolved and an
-      unresolved-context attempt. Uses format: sql throughout; dbt-clickhouse
-      1.9.4 on dbt-core 1.9.11 fails with a "get_expected_sql takes not
-      more than 2 argument(s)" compiler error on the inline list-of-dicts
-      rows: format.
+      Three attempts in the same class. Attempt 1 is a student with a
+      profile name and three enrollment rows in the class: an older name,
+      the current name, and a newer row with an empty name. The newest
+      row with a name wins, and the attempt is not duplicated. It has three
+      question results: one correct, one incorrect and one with a null
+      score, so correct is 1 and total is 3 — an unscored question counts
+      toward total, as MeasureUp scores it. Attempt 2 is a student whose
+      profile name is empty, so student_name falls back to the username,
+      and has no question results, so correct and total are 0. Attempt 3
+      was launched by an instructor and must not appear. Uses format: sql
+      throughout; dbt-clickhouse 1.9.4 on dbt-core 1.9.11 fails with a
+      "get_expected_sql takes not more than 2 argument(s)" compiler error
+      on the inline list-of-dicts rows: format.
     model: rpt_measureup_attempts
     given:
       - input: ref("mart_measureup_attempt_context")
@@ -21,16 +27,56 @@ unit_tests:
               '85' as final_score, 'True' as is_passed, 'proctored' as mode,
               true as has_lti_context, '5000' as lti_user_id, 'ccx-v1:A+2026' as lti_course_id,
               true as has_licensed_class_context, '200' as institution_ccx_id,
-              '5' as institution_id, '30' as license_id
+              '5' as institution_id, '30' as license_id, 'Class A' as class_name,
+              'student' as attempt_user_type
           union all
           select
               '2', '100', 'Active Test',
               'PROD-1', 'incomplete',
-              '2026-01-01T00:00:00Z',
+              '2026-01-02T00:00:00Z',
               cast(null as Nullable(String)), cast(null as Nullable(String)),
               cast(null as Nullable(String)), 'False', 'proctored',
-              false, '', '',
-              false, '', '', ''
+              true, '5001', 'ccx-v1:A+2026',
+              true, '200', '5', '30', 'Class A',
+              'student'
+          union all
+          select
+              '3', '100', 'Active Test',
+              'PROD-1', 'complete',
+              '2026-01-03T00:00:00Z',
+              '2026-01-03T00:30:00Z', '00:30:00',
+              '90', 'True', 'proctored',
+              true, '5002', 'ccx-v1:A+2026',
+              true, '200', '5', '30', 'Class A',
+              'instructor'
+      - input: ref("int_course_licensing_licensed_enrollment_current")
+        format: sql
+        rows: |
+          select
+              '700' as source_id, '5000' as user_id, 'ccx-v1:A+2026' as class_id,
+              'jdoe' as student, 'Jane Old Name' as student_name
+          union all
+          select '701', '5000', 'ccx-v1:A+2026', 'jdoe', 'Jane Doe'
+          union all
+          select '702', '5000', 'ccx-v1:A+2026', 'jdoe', ''
+          union all
+          select '703', '5001', 'ccx-v1:A+2026', 'nprofile', ''
+      - input: ref("int_measureup_exam_question_attempt_current")
+        format: sql
+        rows: |
+          select '30' as source_id, '20' as subdomain_attempt_id, '1' as score
+          union all
+          select '31', '20', '0'
+          union all
+          select '32', '20', cast(null as Nullable(String))
+      - input: ref("int_measureup_exam_attempt_subdomain_current")
+        format: sql
+        rows: |
+          select '20' as source_id, '10' as attempt_domain_id
+      - input: ref("int_measureup_exam_attempt_domain_current")
+        format: sql
+        rows: |
+          select '10' as source_id, '1' as exam_attempt_id
     expect:
       format: sql
       rows: |
@@ -38,20 +84,30 @@ unit_tests:
             '1' as exam_attempt_id, '100' as exam_test_id, 'Active Test' as exam_test_name,
             'PROD-1' as exam_test_product_id, 'complete' as flow_state,
             '2026-01-01T00:00:00Z' as attempt_initiated_datetime,
-            '2026-01-01T00:30:00Z' as attempt_finished_datetime, '00:30:00' as attempt_duration,
+            '2026-01-01T00:30:00Z' as attempt_finished_datetime,
+            parseDateTime64BestEffortOrNull('2026-01-01T00:00:00Z', 6, 'UTC') as attempt_initiated_at,
+            parseDateTime64BestEffortOrNull('2026-01-01T00:30:00Z', 6, 'UTC') as attempt_finished_at,
+            '00:30:00' as attempt_duration,
             '85' as final_score, 'True' as is_passed, 'proctored' as mode,
             true as has_lti_context, '5000' as lti_user_id, 'ccx-v1:A+2026' as lti_course_id,
             true as has_licensed_class_context, '200' as institution_ccx_id,
-            '5' as institution_id, '30' as license_id
+            '5' as institution_id, '30' as license_id, 'Class A' as class_name,
+            'Jane Doe' as student_name, 'jdoe' as student_username,
+            toUInt64(1) as correct, toUInt64(3) as total
         union all
         select
             '2', '100', 'Active Test',
             'PROD-1', 'incomplete',
-            '2026-01-01T00:00:00Z',
-            cast(null as Nullable(String)), cast(null as Nullable(String)),
+            '2026-01-02T00:00:00Z',
+            cast(null as Nullable(String)),
+            parseDateTime64BestEffortOrNull('2026-01-02T00:00:00Z', 6, 'UTC'),
+            cast(null as Nullable(DateTime64(6, 'UTC'))),
+            cast(null as Nullable(String)),
             cast(null as Nullable(String)), 'False', 'proctored',
-            false, '', '',
-            false, '', '', ''
+            true, '5001', 'ccx-v1:A+2026',
+            true, '200', '5', '30', 'Class A',
+            'nprofile', 'nprofile',
+            toUInt64(0), toUInt64(0)
 
   - name: test_rpt_measureup_domain_performance_does_not_duplicate_domains
     description: >
@@ -59,6 +115,7 @@ unit_tests:
       rows, not four — proves the join back to
       mart_measureup_attempt_context (a 1:1 lookup) does not multiply the
       1-to-many relationship between an attempt and its domain results.
+      A third domain result, from an instructor's attempt, must not appear.
     model: rpt_measureup_domain_performance
     given:
       - input: ref("int_measureup_exam_attempt_domain_current")
@@ -67,6 +124,8 @@ unit_tests:
           select '10' as source_id, '1000' as exam_domain_id, '1' as exam_attempt_id, '75' as average_score
           union all
           select '11', '1001', '1', '82'
+          union all
+          select '12', '1000', '2', '100'
       - input: ref("int_measureup_exam_domain_current")
         format: sql
         rows: |
@@ -84,7 +143,16 @@ unit_tests:
               '85' as final_score, 'True' as is_passed, 'proctored' as mode,
               true as has_lti_context, '5000' as lti_user_id, 'ccx-v1:A+2026' as lti_course_id,
               true as has_licensed_class_context, '200' as institution_ccx_id,
-              '5' as institution_id, '30' as license_id
+              '5' as institution_id, '30' as license_id, 'student' as attempt_user_type
+          union all
+          select
+              '2', '100', 'Active Test',
+              'PROD-1', 'complete',
+              '2026-01-02T00:00:00Z',
+              '2026-01-02T00:30:00Z', '00:30:00',
+              '100', 'True', 'proctored',
+              true, '5002', 'ccx-v1:A+2026',
+              true, '200', '5', '30', 'instructor'
     expect:
       format: sql
       rows: |
@@ -107,7 +175,8 @@ unit_tests:
       One attempt-domain with two subdomain results must produce exactly
       two output rows — proves the two-hop join back to the attempt
       (attempt_subdomain -> attempt_domain -> mart) does not multiply
-      rows.
+      rows. A third subdomain result, from an instructor's attempt, must
+      not appear.
     model: rpt_measureup_subdomain_performance
     given:
       - input: ref("int_measureup_exam_attempt_subdomain_current")
@@ -116,6 +185,8 @@ unit_tests:
           select '20' as source_id, '2000' as exam_subdomain_id, '10' as attempt_domain_id, '70' as average_score
           union all
           select '21', '2001', '10', '80'
+          union all
+          select '22', '2000', '11', '100'
       - input: ref("int_measureup_exam_subdomain_current")
         format: sql
         rows: |
@@ -126,6 +197,8 @@ unit_tests:
         format: sql
         rows: |
           select '10' as source_id, '1000' as exam_domain_id, '1' as exam_attempt_id, '75' as average_score
+          union all
+          select '11', '1000', '2', '100'
       - input: ref("mart_measureup_attempt_context")
         format: sql
         rows: |
@@ -137,7 +210,16 @@ unit_tests:
               '85' as final_score, 'True' as is_passed, 'proctored' as mode,
               true as has_lti_context, '5000' as lti_user_id, 'ccx-v1:A+2026' as lti_course_id,
               true as has_licensed_class_context, '200' as institution_ccx_id,
-              '5' as institution_id, '30' as license_id
+              '5' as institution_id, '30' as license_id, 'student' as attempt_user_type
+          union all
+          select
+              '2', '100', 'Active Test',
+              'PROD-1', 'complete',
+              '2026-01-02T00:00:00Z',
+              '2026-01-02T00:30:00Z', '00:30:00',
+              '100', 'True', 'proctored',
+              true, '5002', 'ccx-v1:A+2026',
+              true, '200', '5', '30', 'instructor'
     expect:
       format: sql
       rows: |
@@ -159,10 +241,13 @@ unit_tests:
 
   - name: test_rpt_measureup_question_performance_does_not_duplicate_questions
     description: >
-      One attempt-subdomain with two question-attempt results must
+      One student attempt-subdomain with two question-attempt results must
       produce exactly two output rows — proves the three-hop join back to
-      the attempt does not multiply rows. Also confirms score stays
-      nullable rather than defaulting to a value.
+      the attempt and the two catalog joins do not multiply rows. Also
+      confirms score stays nullable rather than defaulting to a value, the
+      domain/subdomain names and the attempt's mode, dates and class come
+      through, and a third question from an instructor's attempt is
+      dropped.
     model: rpt_measureup_question_performance
     given:
       - input: ref("int_measureup_exam_question_attempt_current")
@@ -177,6 +262,11 @@ unit_tests:
               '31', '3001', '20',
               cast(null as Nullable(String)), 'False', 'False',
               'skipped', 'True'
+          union all
+          select
+              '32', '3000', '21',
+              '1', 'False', 'False',
+              'answered', 'True'
       - input: ref("int_measureup_question_current")
         format: sql
         rows: |
@@ -187,10 +277,22 @@ unit_tests:
         format: sql
         rows: |
           select '20' as source_id, '2000' as exam_subdomain_id, '10' as attempt_domain_id, '70' as average_score
+          union all
+          select '21', '2000', '11', '100'
       - input: ref("int_measureup_exam_attempt_domain_current")
         format: sql
         rows: |
           select '10' as source_id, '1000' as exam_domain_id, '1' as exam_attempt_id, '75' as average_score
+          union all
+          select '11', '1000', '2', '100'
+      - input: ref("int_measureup_exam_subdomain_current")
+        format: sql
+        rows: |
+          select '2000' as source_id, 'Comprehension' as name
+      - input: ref("int_measureup_exam_domain_current")
+        format: sql
+        rows: |
+          select '1000' as source_id, 'Reading' as name
       - input: ref("mart_measureup_attempt_context")
         format: sql
         rows: |
@@ -202,7 +304,18 @@ unit_tests:
               '85' as final_score, 'True' as is_passed, 'proctored' as mode,
               true as has_lti_context, '5000' as lti_user_id, 'ccx-v1:A+2026' as lti_course_id,
               true as has_licensed_class_context, '200' as institution_ccx_id,
-              '5' as institution_id, '30' as license_id
+              '5' as institution_id, '30' as license_id, 'Class A' as class_name,
+              'student' as attempt_user_type
+          union all
+          select
+              '2', '100', 'Active Test',
+              'PROD-1', 'complete',
+              '2026-01-02T00:00:00Z',
+              '2026-01-02T00:30:00Z', '00:30:00',
+              '100', 'True', 'proctored',
+              true, '5002', 'ccx-v1:A+2026',
+              true, '200', '5', '30', 'Class A',
+              'instructor'
     expect:
       format: sql
       rows: |
@@ -212,10 +325,18 @@ unit_tests:
             '5' as score, 'False' as answer_shown, 'False' as review_marked,
             'answered' as question_attempt_status, 'True' as displayed,
             '10' as attempt_domain_id, '2000' as exam_subdomain_id,
-            '1' as exam_attempt_id, '1000' as exam_domain_id,
+            'Comprehension' as exam_subdomain_name,
+            '1' as exam_attempt_id, '1000' as exam_domain_id, 'Reading' as exam_domain_name,
             '100' as exam_test_id, 'Active Test' as exam_test_name, 'complete' as flow_state,
-            'True' as is_passed, true as has_lti_context, true as has_licensed_class_context,
-            '200' as institution_ccx_id, '5' as institution_id, '30' as license_id
+            'True' as is_passed, 'proctored' as mode,
+            '2026-01-01T00:00:00Z' as attempt_initiated_datetime,
+            '2026-01-01T00:30:00Z' as attempt_finished_datetime,
+            parseDateTime64BestEffortOrNull('2026-01-01T00:00:00Z', 6, 'UTC') as attempt_initiated_at,
+            parseDateTime64BestEffortOrNull('2026-01-01T00:30:00Z', 6, 'UTC') as attempt_finished_at,
+            true as has_lti_context, 'ccx-v1:A+2026' as lti_course_id,
+            true as has_licensed_class_context,
+            '200' as institution_ccx_id, '5' as institution_id, '30' as license_id,
+            'Class A' as class_name
         union all
         select
             '31', '20', '3001',
@@ -223,10 +344,18 @@ unit_tests:
             cast(null as Nullable(String)), 'False', 'False',
             'skipped', 'True',
             '10', '2000',
-            '1', '1000',
+            'Comprehension',
+            '1', '1000', 'Reading',
             '100', 'Active Test', 'complete',
-            'True', true, true,
-            '200', '5', '30'
+            'True', 'proctored',
+            '2026-01-01T00:00:00Z',
+            '2026-01-01T00:30:00Z',
+            parseDateTime64BestEffortOrNull('2026-01-01T00:00:00Z', 6, 'UTC'),
+            parseDateTime64BestEffortOrNull('2026-01-01T00:30:00Z', 6, 'UTC'),
+            true, 'ccx-v1:A+2026',
+            true,
+            '200', '5', '30',
+            'Class A'
 
   - name: test_rpt_measureup_exam_readiness_stays_independent_of_attempts
     description: >

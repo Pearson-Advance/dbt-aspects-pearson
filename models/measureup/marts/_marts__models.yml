@@ -53,3 +53,23 @@ models:
         description: >
           Raw Django primary key of the owning Institution
           (course_licensing), when has_licensed_class_context is true.
+      - name: class_name
+        description: >
+          Display name of the licensed class (institution_ccx.ccx_name),
+          when has_licensed_class_context is true; '' otherwise. Not
+          guaranteed unique — two classes can share a name, so use
+          lti_course_id, not this column, to identify a class.
+      - name: attempt_user_type
+        description: >
+          Who launched the attempt, inferred from Course Licensing data for
+          the LTI launch's user and class, checked in this order: 'student'
+          (licensed enrollment in this class), 'instructor' (instructor of
+          this class or of any other), 'institution_admin' (institution
+          administrator), 'other' (anything else, including launches from a
+          master course and attempts with no LTI context). Not the launch's
+          real LTI role. This mart keeps every type; the presentation
+          models keep only 'student'.
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: ["student", "instructor", "institution_admin", "other"]
