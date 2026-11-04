@@ -1,8 +1,8 @@
 packages:
-  - git: https://github.com/openedx/aspects-dbt.git
-    revision: 4d4111c1da91388dfc7d33a8f8aeae86a08f0223
+  - git: https://github.com/Pearson-Advance/aspects-dbt.git
+    revision: 1b0d6986f6fee0b84aa944d8331d4722180c3845
   - package: dbt-labs/codegen
     version: 0.13.1
   - package: dbt-labs/dbt_utils
     version: 1.3.0
-sha1_hash: 564be21da88649319d5828f04594de639077d6eb
+sha1_hash: 8202f27a96d225809eb83ea2f0b77c5937c16f46

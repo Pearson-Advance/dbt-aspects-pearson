@@ -11,9 +11,9 @@ from typing import Any
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
-EXPECTED_ASPECTS_REVISION = "v8.0.0"
-EXPECTED_ASPECTS_COMMIT = "4d4111c1da91388dfc7d33a8f8aeae86a08f0223"
-EXPECTED_LOCK_HASH = "564be21da88649319d5828f04594de639077d6eb"
+EXPECTED_ASPECTS_REVISION = "v8.1.0-pearson1"
+EXPECTED_ASPECTS_COMMIT = "1b0d6986f6fee0b84aa944d8331d4722180c3845"
+EXPECTED_LOCK_HASH = "8202f27a96d225809eb83ea2f0b77c5937c16f46"
 EXPECTED_RUNTIME_REQUIREMENTS = {
     "dbt-clickhouse==1.9.4",
     "dbt-core~=1.9.0",
@@ -49,9 +49,9 @@ def requirement_lines(relative_path: str) -> set[str]:
 
 
 def find_aspects_package(packages: list[dict[str, Any]]) -> dict[str, Any] | None:
-    """Find the openedx/aspects-dbt Git package declaration."""
+    """Find the Pearson-Advance/aspects-dbt Git package declaration."""
     for package in packages:
-        if package.get("git") == "https://github.com/openedx/aspects-dbt.git":
+        if package.get("git") == "https://github.com/Pearson-Advance/aspects-dbt.git":
             return package
     return None
 
