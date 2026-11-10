@@ -15,7 +15,7 @@ unit_tests:
         rows: |
           select
               '1' as source_id, '100' as exam_test_id, '10' as lti_launch_event_id,
-              'complete' as flow_state, '2026-01-01T00:00:00Z' as attempt_initiated_datetime,
+              'finished' as flow_state, '2026-01-01T00:00:00Z' as attempt_initiated_datetime,
               '2026-01-01T00:30:00Z' as attempt_finished_datetime, '00:30:00' as attempt_duration,
               '85' as final_score, 'True' as is_passed, 'proctored' as mode,
               '{}' as mup_attempt_configuration,
@@ -170,7 +170,7 @@ unit_tests:
       format: sql
       rows: |
         select
-            '1' as exam_attempt_id, '100' as exam_test_id, 'complete' as flow_state,
+            '1' as exam_attempt_id, '100' as exam_test_id, 'finished' as flow_state,
             '2026-01-01T00:00:00Z' as attempt_initiated_datetime,
             '2026-01-01T00:30:00Z' as attempt_finished_datetime, '00:30:00' as attempt_duration,
             '85' as final_score, 'True' as is_passed, 'proctored' as mode,
@@ -387,7 +387,7 @@ unit_tests:
         rows: |
           select
               '3' as source_id, '100' as exam_test_id, '11' as lti_launch_event_id,
-              'complete' as flow_state, '2026-01-01T00:00:00Z' as attempt_initiated_datetime,
+              'finished' as flow_state, '2026-01-01T00:00:00Z' as attempt_initiated_datetime,
               '2026-01-01T00:20:00Z' as attempt_finished_datetime, '00:20:00' as attempt_duration,
               '60' as final_score, 'False' as is_passed, 'proctored' as mode,
               '{}' as mup_attempt_configuration,
@@ -543,7 +543,7 @@ unit_tests:
       format: sql
       rows: |
         select
-            '3' as exam_attempt_id, '100' as exam_test_id, 'complete' as flow_state,
+            '3' as exam_attempt_id, '100' as exam_test_id, 'finished' as flow_state,
             '2026-01-01T00:00:00Z' as attempt_initiated_datetime,
             '2026-01-01T00:20:00Z' as attempt_finished_datetime, '00:20:00' as attempt_duration,
             '60' as final_score, 'False' as is_passed, 'proctored' as mode,
@@ -570,7 +570,7 @@ unit_tests:
         rows: |
           select
               '11' as source_id, '100' as exam_test_id, '21' as lti_launch_event_id,
-              'complete' as flow_state, '2026-01-01T00:00:00Z' as attempt_initiated_datetime,
+              'finished' as flow_state, '2026-01-01T00:00:00Z' as attempt_initiated_datetime,
               '2026-01-01T00:30:00Z' as attempt_finished_datetime, '00:30:00' as attempt_duration,
               '85' as final_score, 'True' as is_passed, 'proctored' as mode,
               '{}' as mup_attempt_configuration,
@@ -583,7 +583,7 @@ unit_tests:
           union all
           select
               '12' as source_id, '100' as exam_test_id, '22' as lti_launch_event_id,
-              'complete' as flow_state, '2026-01-01T00:00:00Z' as attempt_initiated_datetime,
+              'finished' as flow_state, '2026-01-01T00:00:00Z' as attempt_initiated_datetime,
               '2026-01-01T00:30:00Z' as attempt_finished_datetime, '00:30:00' as attempt_duration,
               '85' as final_score, 'True' as is_passed, 'proctored' as mode,
               '{}' as mup_attempt_configuration,
@@ -596,7 +596,7 @@ unit_tests:
           union all
           select
               '13' as source_id, '100' as exam_test_id, '23' as lti_launch_event_id,
-              'complete' as flow_state, '2026-01-01T00:00:00Z' as attempt_initiated_datetime,
+              'finished' as flow_state, '2026-01-01T00:00:00Z' as attempt_initiated_datetime,
               '2026-01-01T00:30:00Z' as attempt_finished_datetime, '00:30:00' as attempt_duration,
               '85' as final_score, 'True' as is_passed, 'proctored' as mode,
               '{}' as mup_attempt_configuration,
@@ -609,7 +609,7 @@ unit_tests:
           union all
           select
               '14' as source_id, '100' as exam_test_id, '24' as lti_launch_event_id,
-              'complete' as flow_state, '2026-01-01T00:00:00Z' as attempt_initiated_datetime,
+              'finished' as flow_state, '2026-01-01T00:00:00Z' as attempt_initiated_datetime,
               '2026-01-01T00:30:00Z' as attempt_finished_datetime, '00:30:00' as attempt_duration,
               '85' as final_score, 'True' as is_passed, 'proctored' as mode,
               '{}' as mup_attempt_configuration,
@@ -622,7 +622,7 @@ unit_tests:
           union all
           select
               '15' as source_id, '100' as exam_test_id, '25' as lti_launch_event_id,
-              'complete' as flow_state, '2026-01-01T00:00:00Z' as attempt_initiated_datetime,
+              'finished' as flow_state, '2026-01-01T00:00:00Z' as attempt_initiated_datetime,
               '2026-01-01T00:30:00Z' as attempt_finished_datetime, '00:30:00' as attempt_duration,
               '85' as final_score, 'True' as is_passed, 'proctored' as mode,
               '{}' as mup_attempt_configuration,
@@ -905,7 +905,7 @@ unit_tests:
       format: sql
       rows: |
         select
-            '11' as exam_attempt_id, '100' as exam_test_id, 'complete' as flow_state,
+            '11' as exam_attempt_id, '100' as exam_test_id, 'finished' as flow_state,
             '2026-01-01T00:00:00Z' as attempt_initiated_datetime,
             '2026-01-01T00:30:00Z' as attempt_finished_datetime, '00:30:00' as attempt_duration,
             '85' as final_score, 'True' as is_passed, 'proctored' as mode,
@@ -917,7 +917,7 @@ unit_tests:
             'student' as attempt_user_type
         union all
         select
-            '12' as exam_attempt_id, '100' as exam_test_id, 'complete' as flow_state,
+            '12' as exam_attempt_id, '100' as exam_test_id, 'finished' as flow_state,
             '2026-01-01T00:00:00Z' as attempt_initiated_datetime,
             '2026-01-01T00:30:00Z' as attempt_finished_datetime, '00:30:00' as attempt_duration,
             '85' as final_score, 'True' as is_passed, 'proctored' as mode,
@@ -929,7 +929,7 @@ unit_tests:
             'instructor' as attempt_user_type
         union all
         select
-            '13' as exam_attempt_id, '100' as exam_test_id, 'complete' as flow_state,
+            '13' as exam_attempt_id, '100' as exam_test_id, 'finished' as flow_state,
             '2026-01-01T00:00:00Z' as attempt_initiated_datetime,
             '2026-01-01T00:30:00Z' as attempt_finished_datetime, '00:30:00' as attempt_duration,
             '85' as final_score, 'True' as is_passed, 'proctored' as mode,
@@ -941,7 +941,7 @@ unit_tests:
             'instructor' as attempt_user_type
         union all
         select
-            '14' as exam_attempt_id, '100' as exam_test_id, 'complete' as flow_state,
+            '14' as exam_attempt_id, '100' as exam_test_id, 'finished' as flow_state,
             '2026-01-01T00:00:00Z' as attempt_initiated_datetime,
             '2026-01-01T00:30:00Z' as attempt_finished_datetime, '00:30:00' as attempt_duration,
             '85' as final_score, 'True' as is_passed, 'proctored' as mode,
@@ -953,7 +953,7 @@ unit_tests:
             'institution_admin' as attempt_user_type
         union all
         select
-            '15' as exam_attempt_id, '100' as exam_test_id, 'complete' as flow_state,
+            '15' as exam_attempt_id, '100' as exam_test_id, 'finished' as flow_state,
             '2026-01-01T00:00:00Z' as attempt_initiated_datetime,
             '2026-01-01T00:30:00Z' as attempt_finished_datetime, '00:30:00' as attempt_duration,
             '85' as final_score, 'True' as is_passed, 'proctored' as mode,

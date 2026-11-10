@@ -1,19 +1,19 @@
 unit_tests:
   - name: test_rpt_measureup_attempts_resolves_student_results
     description: >
-      Three attempts in the same class. Attempt 1 is a student with a
-      profile name and three enrollment rows in the class: an older name,
-      the current name, and a newer row with an empty name. The newest
-      row with a name wins, and the attempt is not duplicated. It has three
-      question results: one correct, one incorrect and one with a null
-      score, so correct is 1 and total is 3 — an unscored question counts
-      toward total, as MeasureUp scores it. Attempt 2 is a student whose
-      profile name is empty, so student_name falls back to the username,
-      and has no question results, so correct and total are 0. Attempt 3
-      was launched by an instructor and must not appear. Uses format: sql
-      throughout; dbt-clickhouse 1.9.4 on dbt-core 1.9.11 fails with a
-      "get_expected_sql takes not more than 2 argument(s)" compiler error
-      on the inline list-of-dicts rows: format.
+      Four attempts in the same class. Attempt 1 is a finished student attempt
+      with a profile name and three enrollment rows in the class: an older name,
+      the current name, and a newer row with an empty name. The newest row with
+      a name wins, and the attempt is not duplicated. It has three question
+      results: one correct, one incorrect and one with a null score, so correct
+      is 1 and total is 3. Its derived end is calculated from start plus
+      duration. Attempt 2 is incomplete and carries recorded finish/duration
+      values, but must not receive a derived end. Attempt 3 was launched by an
+      instructor and must not appear. Attempt 4 is marked finished and has a
+      valid duration but no source finish timestamp, so it must not receive a
+      derived end. Uses format: sql throughout; dbt-clickhouse 1.9.4 on
+      dbt-core 1.9.11 fails with a "get_expected_sql takes not more than 2
+      argument(s)" compiler error on the inline list-of-dicts rows: format.
     model: rpt_measureup_attempts
     given:
       - input: ref("mart_measureup_attempt_context")
@@ -21,11 +21,13 @@ unit_tests:
         rows: |
           select
               '1' as exam_attempt_id, '100' as exam_test_id, 'Active Test' as exam_test_name,
-              'PROD-1' as exam_test_product_id, 'complete' as flow_state,
+              'PROD-1' as exam_test_product_id, 'finished' as flow_state,
               '2026-01-01T00:00:00Z' as attempt_initiated_datetime,
-              '2026-01-01T00:30:00Z' as attempt_finished_datetime, '00:30:00' as attempt_duration,
+              '2026-01-01T00:30:00Z' as attempt_finished_datetime,
+              '00:30:00' as attempt_duration,
               '85' as final_score, 'True' as is_passed, 'proctored' as mode,
-              true as has_lti_context, '5000' as lti_user_id, 'ccx-v1:A+2026' as lti_course_id,
+              true as has_lti_context, '5000' as lti_user_id,
+              'ccx-v1:A+2026' as lti_course_id,
               true as has_licensed_class_context, '200' as institution_ccx_id,
               '5' as institution_id, '30' as license_id, 'Class A' as class_name,
               'student' as attempt_user_type
@@ -34,7 +36,8 @@ unit_tests:
               '2', '100', 'Active Test',
               'PROD-1', 'incomplete',
               '2026-01-02T00:00:00Z',
-              cast(null as Nullable(String)), cast(null as Nullable(String)),
+              '2026-01-02T00:15:00Z',
+              '00:15:00',
               cast(null as Nullable(String)), 'False', 'proctored',
               true, '5001', 'ccx-v1:A+2026',
               true, '200', '5', '30', 'Class A',
@@ -42,13 +45,25 @@ unit_tests:
           union all
           select
               '3', '100', 'Active Test',
-              'PROD-1', 'complete',
+              'PROD-1', 'finished',
               '2026-01-03T00:00:00Z',
-              '2026-01-03T00:30:00Z', '00:30:00',
+              '2026-01-03T00:30:00Z',
+              '00:30:00',
               '90', 'True', 'proctored',
               true, '5002', 'ccx-v1:A+2026',
               true, '200', '5', '30', 'Class A',
               'instructor'
+          union all
+          select
+              '4', '100', 'Active Test',
+              'PROD-1', 'finished',
+              '2026-01-04T00:00:00Z',
+              cast(null as Nullable(String)),
+              '00:10:00',
+              '70', 'True', 'proctored',
+              true, '5003', 'ccx-v1:A+2026',
+              true, '200', '5', '30', 'Class A',
+              'student'
       - input: ref("int_course_licensing_licensed_enrollment_current")
         format: sql
         rows: |
@@ -61,6 +76,8 @@ unit_tests:
           select '702', '5000', 'ccx-v1:A+2026', 'jdoe', ''
           union all
           select '703', '5001', 'ccx-v1:A+2026', 'nprofile', ''
+          union all
+          select '704', '5003', 'ccx-v1:A+2026', 'nofinish', 'No Finish'
       - input: ref("int_measureup_exam_question_attempt_current")
         format: sql
         rows: |
@@ -82,14 +99,23 @@ unit_tests:
       rows: |
         select
             '1' as exam_attempt_id, '100' as exam_test_id, 'Active Test' as exam_test_name,
-            'PROD-1' as exam_test_product_id, 'complete' as flow_state,
+            'PROD-1' as exam_test_product_id, 'finished' as flow_state,
             '2026-01-01T00:00:00Z' as attempt_initiated_datetime,
             '2026-01-01T00:30:00Z' as attempt_finished_datetime,
-            parseDateTime64BestEffortOrNull('2026-01-01T00:00:00Z', 6, 'UTC') as attempt_initiated_at,
-            parseDateTime64BestEffortOrNull('2026-01-01T00:30:00Z', 6, 'UTC') as attempt_finished_at,
+            parseDateTime64BestEffortOrNull(
+                '2026-01-01T00:00:00Z', 6, 'UTC'
+            ) as attempt_initiated_at,
+            parseDateTime64BestEffortOrNull(
+                '2026-01-01T00:30:00Z', 6, 'UTC'
+            ) as attempt_finished_at,
             '00:30:00' as attempt_duration,
+            toDecimal64(1800, 6) as attempt_duration_seconds,
+            parseDateTime64BestEffortOrNull(
+                '2026-01-01T00:30:00Z', 6, 'UTC'
+            ) as attempt_ended_at_utc,
             '85' as final_score, 'True' as is_passed, 'proctored' as mode,
-            true as has_lti_context, '5000' as lti_user_id, 'ccx-v1:A+2026' as lti_course_id,
+            true as has_lti_context, '5000' as lti_user_id,
+            'ccx-v1:A+2026' as lti_course_id,
             true as has_licensed_class_context, '200' as institution_ccx_id,
             '5' as institution_id, '30' as license_id, 'Class A' as class_name,
             'Jane Doe' as student_name, 'jdoe' as student_username,
@@ -99,14 +125,38 @@ unit_tests:
             '2', '100', 'Active Test',
             'PROD-1', 'incomplete',
             '2026-01-02T00:00:00Z',
-            cast(null as Nullable(String)),
-            parseDateTime64BestEffortOrNull('2026-01-02T00:00:00Z', 6, 'UTC'),
+            '2026-01-02T00:15:00Z',
+            parseDateTime64BestEffortOrNull(
+                '2026-01-02T00:00:00Z', 6, 'UTC'
+            ),
+            parseDateTime64BestEffortOrNull(
+                '2026-01-02T00:15:00Z', 6, 'UTC'
+            ),
+            '00:15:00',
+            toDecimal64(900, 6),
             cast(null as Nullable(DateTime64(6, 'UTC'))),
-            cast(null as Nullable(String)),
             cast(null as Nullable(String)), 'False', 'proctored',
             true, '5001', 'ccx-v1:A+2026',
             true, '200', '5', '30', 'Class A',
             'nprofile', 'nprofile',
+            toUInt64(0), toUInt64(0)
+        union all
+        select
+            '4', '100', 'Active Test',
+            'PROD-1', 'finished',
+            '2026-01-04T00:00:00Z',
+            cast(null as Nullable(String)),
+            parseDateTime64BestEffortOrNull(
+                '2026-01-04T00:00:00Z', 6, 'UTC'
+            ),
+            cast(null as Nullable(DateTime64(6, 'UTC'))),
+            '00:10:00',
+            toDecimal64(600, 6),
+            cast(null as Nullable(DateTime64(6, 'UTC'))),
+            '70', 'True', 'proctored',
+            true, '5003', 'ccx-v1:A+2026',
+            true, '200', '5', '30', 'Class A',
+            'No Finish', 'nofinish',
             toUInt64(0), toUInt64(0)
 
   - name: test_rpt_measureup_domain_performance_does_not_duplicate_domains
@@ -137,7 +187,7 @@ unit_tests:
         rows: |
           select
               '1' as exam_attempt_id, '100' as exam_test_id, 'Active Test' as exam_test_name,
-              'PROD-1' as exam_test_product_id, 'complete' as flow_state,
+              'PROD-1' as exam_test_product_id, 'finished' as flow_state,
               '2026-01-01T00:00:00Z' as attempt_initiated_datetime,
               '2026-01-01T00:30:00Z' as attempt_finished_datetime, '00:30:00' as attempt_duration,
               '85' as final_score, 'True' as is_passed, 'proctored' as mode,
@@ -147,7 +197,7 @@ unit_tests:
           union all
           select
               '2', '100', 'Active Test',
-              'PROD-1', 'complete',
+              'PROD-1', 'finished',
               '2026-01-02T00:00:00Z',
               '2026-01-02T00:30:00Z', '00:30:00',
               '100', 'True', 'proctored',
@@ -159,14 +209,14 @@ unit_tests:
         select
             '10' as attempt_domain_id, '1' as exam_attempt_id, '1000' as exam_domain_id,
             'Reading' as exam_domain_name, '75' as average_score,
-            '100' as exam_test_id, 'Active Test' as exam_test_name, 'complete' as flow_state,
+            '100' as exam_test_id, 'Active Test' as exam_test_name, 'finished' as flow_state,
             'True' as is_passed, true as has_lti_context, true as has_licensed_class_context,
             '200' as institution_ccx_id, '5' as institution_id, '30' as license_id
         union all
         select
             '11', '1', '1001',
             'Math', '82',
-            '100', 'Active Test', 'complete',
+            '100', 'Active Test', 'finished',
             'True', true, true,
             '200', '5', '30'
 
@@ -204,7 +254,7 @@ unit_tests:
         rows: |
           select
               '1' as exam_attempt_id, '100' as exam_test_id, 'Active Test' as exam_test_name,
-              'PROD-1' as exam_test_product_id, 'complete' as flow_state,
+              'PROD-1' as exam_test_product_id, 'finished' as flow_state,
               '2026-01-01T00:00:00Z' as attempt_initiated_datetime,
               '2026-01-01T00:30:00Z' as attempt_finished_datetime, '00:30:00' as attempt_duration,
               '85' as final_score, 'True' as is_passed, 'proctored' as mode,
@@ -214,7 +264,7 @@ unit_tests:
           union all
           select
               '2', '100', 'Active Test',
-              'PROD-1', 'complete',
+              'PROD-1', 'finished',
               '2026-01-02T00:00:00Z',
               '2026-01-02T00:30:00Z', '00:30:00',
               '100', 'True', 'proctored',
@@ -227,7 +277,7 @@ unit_tests:
             '20' as attempt_subdomain_id, '10' as attempt_domain_id, '2000' as exam_subdomain_id,
             'Comprehension' as exam_subdomain_name, '70' as average_score,
             '1' as exam_attempt_id, '1000' as exam_domain_id,
-            '100' as exam_test_id, 'Active Test' as exam_test_name, 'complete' as flow_state,
+            '100' as exam_test_id, 'Active Test' as exam_test_name, 'finished' as flow_state,
             'True' as is_passed, true as has_lti_context, true as has_licensed_class_context,
             '200' as institution_ccx_id, '5' as institution_id, '30' as license_id
         union all
@@ -235,7 +285,7 @@ unit_tests:
             '21', '10', '2001',
             'Vocabulary', '80',
             '1', '1000',
-            '100', 'Active Test', 'complete',
+            '100', 'Active Test', 'finished',
             'True', true, true,
             '200', '5', '30'
 
@@ -298,7 +348,7 @@ unit_tests:
         rows: |
           select
               '1' as exam_attempt_id, '100' as exam_test_id, 'Active Test' as exam_test_name,
-              'PROD-1' as exam_test_product_id, 'complete' as flow_state,
+              'PROD-1' as exam_test_product_id, 'finished' as flow_state,
               '2026-01-01T00:00:00Z' as attempt_initiated_datetime,
               '2026-01-01T00:30:00Z' as attempt_finished_datetime, '00:30:00' as attempt_duration,
               '85' as final_score, 'True' as is_passed, 'proctored' as mode,
@@ -309,7 +359,7 @@ unit_tests:
           union all
           select
               '2', '100', 'Active Test',
-              'PROD-1', 'complete',
+              'PROD-1', 'finished',
               '2026-01-02T00:00:00Z',
               '2026-01-02T00:30:00Z', '00:30:00',
               '100', 'True', 'proctored',
@@ -327,7 +377,7 @@ unit_tests:
             '10' as attempt_domain_id, '2000' as exam_subdomain_id,
             'Comprehension' as exam_subdomain_name,
             '1' as exam_attempt_id, '1000' as exam_domain_id, 'Reading' as exam_domain_name,
-            '100' as exam_test_id, 'Active Test' as exam_test_name, 'complete' as flow_state,
+            '100' as exam_test_id, 'Active Test' as exam_test_name, 'finished' as flow_state,
             'True' as is_passed, 'proctored' as mode,
             '2026-01-01T00:00:00Z' as attempt_initiated_datetime,
             '2026-01-01T00:30:00Z' as attempt_finished_datetime,
@@ -346,7 +396,7 @@ unit_tests:
             '10', '2000',
             'Comprehension',
             '1', '1000', 'Reading',
-            '100', 'Active Test', 'complete',
+            '100', 'Active Test', 'finished',
             'True', 'proctored',
             '2026-01-01T00:00:00Z',
             '2026-01-01T00:30:00Z',
