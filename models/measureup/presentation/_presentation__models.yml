@@ -18,22 +18,27 @@ models:
       this model.
 
 
-      Completion rule: an attempt is only "completed" when flow_state
-      indicates completion (e.g. 'complete') AND attempt_finished_datetime
-      is not null. Do not infer completion from is_passed or final_score
-      alone — an incomplete attempt can still carry a stale/partial score.
+      Completion rule: an attempt is completed only when flow_state =
+      'finished' AND attempt_finished_datetime is not null. Do not infer
+      completion from is_passed, final_score, or duration alone — an
+      unfinished attempt can still carry partial or stale values.
 
 
       Pass-rate rule: eligible denominator is completed attempts only (per
       the rule above). is_passed reflects the source system's own
-      pass/fail determination for a completed attempt; an incomplete
+      pass/fail determination for a completed attempt; an unfinished
       attempt must not be counted as failed, and must not be included in
       either the numerator or the denominator of a pass rate.
 
 
-      Duration: attempt_duration is sourced as-is from the integration.
-      Only meaningful for completed attempts — do not compute duration
-      from timestamps for an attempt still in progress.
+      Duration: attempt_duration preserves the raw integration value.
+      Representative deployed records serialize it as H+:MM:SS with
+      second precision. attempt_duration_seconds normalizes supported
+      duration values as an interval in seconds; missing, malformed, and
+      negative values remain NULL. Durations longer than 24 hours do not
+      wrap. attempt_ended_at_utc is a calculated value based on the
+      canonical UTC start plus normalized duration and remains distinct
+      from the source-reported attempt_finished_at.
     data_tests:
       - unique:
           column_name: exam_attempt_id
@@ -49,8 +54,31 @@ models:
           the text is empty or not a timestamp.
       - name: attempt_finished_at
         description: >
-          attempt_finished_datetime converted to DateTime64(6, 'UTC') once
-          per refresh. NULL for attempts that have not finished.
+          Source-reported attempt_finished_datetime converted to
+          DateTime64(6, 'UTC') once per refresh. NULL when the source
+          finish is unavailable. This remains distinct from
+          attempt_ended_at_utc, which is calculated from start plus
+          recorded duration.
+      - name: attempt_duration
+        description: >
+          Raw duration value supplied by the MeasureUp integration.
+          Representative deployed records use H+:MM:SS with second
+          precision. Preserved unchanged for source traceability.
+      - name: attempt_duration_seconds
+        description: >
+          Recorded attempt duration normalized to numeric seconds.
+          Supported H+:MM:SS values may include up to six fractional
+          second digits. Missing, malformed, or negative values remain
+          NULL rather than being coerced to zero. Duration is treated as
+          an interval, so values longer than 24 hours do not wrap.
+      - name: attempt_ended_at_utc
+        description: >
+          Calculated End Date in UTC: attempt_initiated_at plus
+          attempt_duration_seconds. Populated only when flow_state is
+          'finished', a valid source finish exists, and start and duration
+          are valid. A genuine zero duration produces an end equal to the
+          start. This field does not replace attempt_finished_at and does
+          not independently establish the source submission time.
       - name: exam_test_id
         description: >
           Exact MeasureUp test-version source_id attempted. Never collapse

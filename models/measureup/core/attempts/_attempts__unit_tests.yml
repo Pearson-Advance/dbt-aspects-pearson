@@ -7,8 +7,8 @@ unit_tests:
         format: sql
         rows: |
           select '1' as source_id, '101' as exam_test_id, cast(null as Nullable(String)) as lti_launch_event_id,
-              'completed' as flow_state, '2026-01-01 00:00:00+00:00' as attempt_initiated_datetime,
-              '2026-01-01 00:45:00+00:00' as attempt_finished_datetime, 'PT45M' as attempt_duration,
+              'finished' as flow_state, '2026-01-01 00:00:00+00:00' as attempt_initiated_datetime,
+              '2026-01-01 00:45:00+00:00' as attempt_finished_datetime, '00:45:00' as attempt_duration,
               '84.50' as final_score, 'True' as is_passed, 'practice' as mode,
               '{"attemptMode":"practice"}' as mup_attempt_configuration, 'UPSERT' as operation, 'False' as is_deleted,
               '2026-01-01 00:00:00.000000+00:00' as source_updated_at,
@@ -16,9 +16,9 @@ unit_tests:
               toUUID('11111111-1111-1111-1111-000000000001') as dump_id,
               toUUID('22222222-2222-2222-2222-000000000001') as sink_event_id, '2' as schema_version
           union all
-          select '2' as source_id, '102' as exam_test_id, '1002' as lti_launch_event_id, 'completed' as flow_state,
+          select '2' as source_id, '102' as exam_test_id, '1002' as lti_launch_event_id, 'finished' as flow_state,
               '2026-01-01 01:00:00+00:00' as attempt_initiated_datetime,
-              '2026-01-01 01:30:00+00:00' as attempt_finished_datetime, 'PT30M' as attempt_duration,
+              '2026-01-01 01:30:00+00:00' as attempt_finished_datetime, '00:30:00' as attempt_duration,
               '60.00' as final_score, 'False' as is_passed, 'certification' as mode,
               '{"attemptMode":"certification"}' as mup_attempt_configuration, 'DELETE' as operation,
               'True' as is_deleted, '2026-01-01 00:00:01.000000+00:00' as source_updated_at,
@@ -29,8 +29,8 @@ unit_tests:
       format: sql
       rows: |
         select '1' as source_id, '101' as exam_test_id, cast(null as Nullable(String)) as lti_launch_event_id,
-            'completed' as flow_state, '2026-01-01 00:00:00+00:00' as attempt_initiated_datetime,
-            '2026-01-01 00:45:00+00:00' as attempt_finished_datetime, 'PT45M' as attempt_duration,
+            'finished' as flow_state, '2026-01-01 00:00:00+00:00' as attempt_initiated_datetime,
+            '2026-01-01 00:45:00+00:00' as attempt_finished_datetime, '00:45:00' as attempt_duration,
             '84.50' as final_score, 'True' as is_passed, 'practice' as mode,
             '{"attemptMode":"practice"}' as mup_attempt_configuration, 'UPSERT' as operation, 'False' as is_deleted,
             '2026-01-01 00:00:00.000000+00:00' as source_updated_at,

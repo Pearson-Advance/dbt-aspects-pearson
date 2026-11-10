@@ -31,9 +31,32 @@
     Refreshable materialized view (every 4 hours, atomic replace), ordered
     by institution, class and start time for dashboard filters and
     row-level security. Changing columns or ordering needs a
-    --full-refresh. attempt_*_at are the text timestamps parsed once per
-    refresh. mup_attempt_configuration is never projected.
+    --full-refresh.
+
+    attempt_*_at are UTC timestamps parsed from the source text timestamps.
+    attempt_duration_seconds normalizes the recorded attempt duration as an
+    interval in seconds. attempt_ended_at_utc is calculated from the canonical
+    attempt start plus the normalized duration for eligible finished attempts.
+    It remains distinct from attempt_finished_at, which represents the
+    source-reported finish timestamp.
+
+    mup_attempt_configuration is never projected.
 #}
+with
+    attempt_context as (
+        select
+            mart.*,
+            parseDateTime64BestEffortOrNull(
+                mart.attempt_initiated_datetime, 6, 'UTC'
+            ) as attempt_initiated_at,
+            parseDateTime64BestEffortOrNull(
+                mart.attempt_finished_datetime, 6, 'UTC'
+            ) as attempt_finished_at,
+            {{ measureup_attempt_duration_seconds("mart.attempt_duration") }}
+            as attempt_duration_seconds
+        from {{ ref("mart_measureup_attempt_context") }} as mart
+    )
+
 select
     mart.exam_attempt_id as exam_attempt_id,
     mart.exam_test_id as exam_test_id,
@@ -42,13 +65,23 @@ select
     mart.flow_state as flow_state,
     mart.attempt_initiated_datetime as attempt_initiated_datetime,
     mart.attempt_finished_datetime as attempt_finished_datetime,
-    parseDateTime64BestEffortOrNull(
-        mart.attempt_initiated_datetime, 6, 'UTC'
-    ) as attempt_initiated_at,
-    parseDateTime64BestEffortOrNull(
-        mart.attempt_finished_datetime, 6, 'UTC'
-    ) as attempt_finished_at,
+    mart.attempt_initiated_at as attempt_initiated_at,
+    mart.attempt_finished_at as attempt_finished_at,
     mart.attempt_duration as attempt_duration,
+    mart.attempt_duration_seconds as attempt_duration_seconds,
+
+    if(
+        mart.flow_state = 'finished'
+        and mart.attempt_finished_at is not null
+        and mart.attempt_initiated_at is not null
+        and mart.attempt_duration_seconds is not null
+        and mart.attempt_duration_seconds >= 0,
+        addMicroseconds(
+            mart.attempt_initiated_at, toInt64(mart.attempt_duration_seconds * 1000000)
+        ),
+        cast(null as Nullable(DateTime64(6, 'UTC')))
+    ) as attempt_ended_at_utc,
+
     mart.final_score as final_score,
     mart.is_passed as is_passed,
     mart.mode as mode,
@@ -71,7 +104,7 @@ select
     coalesce(question_summary.correct, 0) as correct,
     coalesce(question_summary.total, 0) as total
 
-from {{ ref("mart_measureup_attempt_context") }} as mart
+from attempt_context as mart
 left join
     (
         select
