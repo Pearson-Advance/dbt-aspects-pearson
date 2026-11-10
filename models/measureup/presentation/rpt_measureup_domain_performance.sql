@@ -12,7 +12,7 @@
     Both joins are FK-to-source_id, at most 1:1 — cannot multiply
     attempt_domain rows.
 
-    Only results of attempts classified as 'student' are kept, the same
+    Only results of retained attempts classified as 'student' are kept, the same
     rule as every other presentation view, so a report built on this
     model never mixes in instructor or administrator launches. A result
     whose chain does not reach an attempt in the mart is dropped too.
@@ -20,6 +20,7 @@
 select
     attempt_domain.source_id as attempt_domain_id,
     attempt_domain.exam_attempt_id as exam_attempt_id,
+    mart.attempt_count as attempt_count,
     attempt_domain.exam_domain_id as exam_domain_id,
     exam_domain.name as exam_domain_name,
     attempt_domain.average_score as average_score,
