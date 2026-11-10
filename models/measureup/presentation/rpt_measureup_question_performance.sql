@@ -21,7 +21,7 @@
     attempt's mode, dates and class are resolved here so dashboard
     datasets read this model without joining anything.
 
-    Only results of 'student' attempts are kept, as in
+    Only results of retained 'student' attempts are kept, as in
     rpt_measureup_attempts, so instructor launches do not count toward
     domain scores. A question whose chain does not reach an attempt cannot
     be classified and is dropped too.
@@ -50,6 +50,7 @@ select
     exam_subdomain.name as exam_subdomain_name,
 
     attempt_domain.exam_attempt_id as exam_attempt_id,
+    mart.attempt_count as attempt_count,
     attempt_domain.exam_domain_id as exam_domain_id,
     exam_domain.name as exam_domain_name,
 

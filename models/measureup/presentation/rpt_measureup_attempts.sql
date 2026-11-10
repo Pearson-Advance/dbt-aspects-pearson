@@ -14,10 +14,12 @@
 }}
 
 {#
-    Dashboard-ready grain: one row per current student exam attempt, built
+    Dashboard-ready grain: one row per retained current student exam attempt, built
     on mart_measureup_attempt_context (test version, LTI context, class and
     attempt_user_type are resolved there). Only 'student' attempts are
     kept: the LTI unit creates an attempt for any role that opens it.
+    Attempt-current selects the latest start across modes before these
+    report filters; attempt_count includes that retained attempt.
 
     Learner identity is joined here, not in the mart, so other views do not
     inherit personal data. The enrollment lookup is grouped per (user,
@@ -36,6 +38,7 @@
 #}
 select
     mart.exam_attempt_id as exam_attempt_id,
+    mart.attempt_count as attempt_count,
     mart.exam_test_id as exam_test_id,
     mart.exam_test_name as exam_test_name,
     mart.exam_test_product_id as exam_test_product_id,

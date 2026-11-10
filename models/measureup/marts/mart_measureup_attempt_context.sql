@@ -9,9 +9,11 @@
 
 {#
     Shared reusable transformation: resolves, for each
-    current exam attempt, the exact test version attempted, its LTI launch
+    retained current exam attempt, the exact test version attempted, its LTI launch
     context (if any), and the licensed class that context belongs to (if
-    any). Reused by every presentation view descended from an attempt
+    any). The current model selects the latest started attempt per learner,
+    class and exact test version, retaining unresolved attempts separately.
+    Reused by every presentation view descended from an attempt
     (rpt_measureup_attempts, _domain_performance, _subdomain_performance,
     _question_performance) so this join chain is written exactly once.
 
@@ -21,7 +23,7 @@
     defensive anyway) — each one is at most 1:1, so this cannot multiply
     attempt rows. has_lti_context and has_licensed_class_context make a
     missing relationship explicit instead of silently dropping the
-    attempt — an unresolved LTI or licensed-class link must stay visible
+    retained attempt — an unresolved LTI or licensed-class link must stay visible
     downstream rather than disappear through an inner join. Compared
     against '', not IS NOT NULL — verified empirically that ClickHouse's
     default join_use_nulls=0 fills an unmatched left join's non-Nullable
@@ -45,12 +47,13 @@
     falls into 'other'. 'student' is checked first on purpose: a user who
     is both enrolled in and instructing the same class counts as a
     student, so a real student is never excluded. This mart keeps every
-    attempt; the presentation models keep only 'student'. Each lookup is
+    retained attempt; the presentation models keep only 'student'. Each lookup is
     grouped to one row per join key, so none of them can multiply attempt
     rows.
 #}
 select
     attempt.source_id as exam_attempt_id,
+    attempt.attempt_count,
     attempt.exam_test_id,
     attempt.flow_state,
     attempt.attempt_initiated_datetime,
