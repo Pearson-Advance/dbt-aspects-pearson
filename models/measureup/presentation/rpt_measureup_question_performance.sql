@@ -15,9 +15,9 @@
 
 {#
     Dashboard-ready grain: one row per current question-attempt result.
-    Every join is FK-to-source_id, at most 1:1: three hops back to the
+    Every join uses a unique source or attempt ID, at most 1:1: three hops back to the
     attempt (question_attempt -> attempt_subdomain -> attempt_domain ->
-    mart) plus the domain and subdomain catalogs. Catalog names and the
+    mart) plus numbering and the domain and subdomain catalogs. Catalog names and the
     attempt's mode, dates and class are resolved here so dashboard
     datasets read this model without joining anything.
 
@@ -50,6 +50,7 @@ select
     exam_subdomain.name as exam_subdomain_name,
 
     attempt_domain.exam_attempt_id as exam_attempt_id,
+    numbering.attempt_number as attempt_number,
     attempt_domain.exam_domain_id as exam_domain_id,
     exam_domain.name as exam_domain_name,
 
@@ -93,4 +94,7 @@ left join
 left join
     {{ ref("mart_measureup_attempt_context") }} as mart
     on attempt_domain.exam_attempt_id = mart.exam_attempt_id
+left join
+    {{ ref("mart_measureup_attempt_numbering") }} as numbering
+    on mart.exam_attempt_id = numbering.exam_attempt_id
 where mart.attempt_user_type = 'student'

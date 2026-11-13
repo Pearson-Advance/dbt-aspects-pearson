@@ -6,7 +6,8 @@ models:
       Dashboard-ready grain: one row per current student exam attempt.
       Built on mart_measureup_attempt_context — test version, LTI context,
       licensed-class ownership and attempt_user_type are already resolved
-      there. Only attempts with attempt_user_type = 'student' are kept;
+      there. Separately left joins mart_measureup_attempt_numbering by
+      exam_attempt_id for the ordinal. Only attempts with attempt_user_type = 'student' are kept;
       instructor, administrator and other launches stay in the mart only.
 
       Materialized as a refreshable materialized view refreshed every 4
@@ -47,6 +48,11 @@ models:
     columns:
       - name: exam_attempt_id
         description: Grain key — same value as int_measureup_exam_test_attempt_current.source_id.
+      - name: attempt_number
+        description: >
+          Nullable UInt64 ordinal inherited from mart_measureup_attempt_numbering
+          before report filtering. Numbered across modes per learner/course/exact
+          test ID, not recalculated here. NULL when numbering eligibility fails.
       - name: attempt_initiated_at
         description: >
           attempt_initiated_datetime converted to DateTime64(6, 'UTC') once
@@ -145,6 +151,11 @@ models:
     columns:
       - name: attempt_domain_id
         description: Grain key — same value as int_measureup_exam_attempt_domain_current.source_id.
+      - name: attempt_number
+        description: >
+          Owning attempt's nullable UInt64 ordinal from
+          mart_measureup_attempt_numbering, repeated on each domain result.
+          Not a domain rank or an additive measure.
       - name: exam_attempt_id
         description: >
           Owning attempt's source_id — join key back to
@@ -171,6 +182,11 @@ models:
     columns:
       - name: attempt_subdomain_id
         description: Grain key — same value as int_measureup_exam_attempt_subdomain_current.source_id.
+      - name: attempt_number
+        description: >
+          Owning attempt's nullable UInt64 ordinal from
+          mart_measureup_attempt_numbering, repeated on each subdomain result.
+          Not a subdomain rank or an additive measure.
       - name: attempt_domain_id
         description: Owning attempt-domain result's source_id.
       - name: exam_attempt_id
@@ -232,6 +248,11 @@ models:
           average rather than treating a missing score as 0.
       - name: exam_attempt_id
         description: Owning attempt's source_id, recovered via attempt_subdomain and attempt_domain.
+      - name: attempt_number
+        description: >
+          Owning attempt's nullable UInt64 ordinal from
+          mart_measureup_attempt_numbering, repeated on each question result.
+          Calculated at attempt grain before result joins, never a question rank.
       - name: exam_domain_name
         description: Display name of the exam domain, from int_measureup_exam_domain_current.
       - name: exam_subdomain_name

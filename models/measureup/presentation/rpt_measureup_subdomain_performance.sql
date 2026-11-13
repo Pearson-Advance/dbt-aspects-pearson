@@ -11,7 +11,8 @@
     Dashboard-ready grain: one row per current attempt-subdomain result.
     attempt_subdomain only carries attempt_domain_id, not exam_attempt_id
     directly — attempt_domain is the hop back to the attempt/context, not
-    just a name lookup here. Every join is FK-to-source_id, at most 1:1.
+    just a name lookup here. Every join uses a unique source or attempt ID,
+    at most 1:1.
 
     Only results of attempts classified as 'student' are kept, the same
     rule as every other presentation view, so a report built on this
@@ -26,6 +27,7 @@ select
     attempt_subdomain.average_score as average_score,
 
     attempt_domain.exam_attempt_id as exam_attempt_id,
+    numbering.attempt_number as attempt_number,
     attempt_domain.exam_domain_id as exam_domain_id,
 
     mart.exam_test_id as exam_test_id,
@@ -48,4 +50,7 @@ left join
 left join
     {{ ref("mart_measureup_attempt_context") }} as mart
     on attempt_domain.exam_attempt_id = mart.exam_attempt_id
+left join
+    {{ ref("mart_measureup_attempt_numbering") }} as numbering
+    on mart.exam_attempt_id = numbering.exam_attempt_id
 where mart.attempt_user_type = 'student'

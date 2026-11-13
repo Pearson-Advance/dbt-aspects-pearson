@@ -1,6 +1,51 @@
 version: 2
 
 models:
+  - name: mart_measureup_attempt_numbering
+    description: >
+      One row per current non-deleted source attempt, exposing only
+      exam_attempt_id and nullable UInt64 attempt_number. Uses resolved keys
+      from mart_measureup_attempt_context without carrying its context payload.
+      Unlike latest-attempt selection, this retains
+      every distinct surviving attempt. Snapshot deduplication and tombstones
+      are handled upstream; replayed exports do not create new attempts.
+
+      Qualifying attempts have resolved LTI and licensed-class context,
+      non-empty LTI user/course and exact Django ExamTest primary-key
+      identifiers, and a parseable start. Numbering is one-based within
+      (lti_user_id, lti_course_id, exam_test_id), ordered by UTC start ascending
+      then numeric exam_attempt_id ascending. Modes, completion and pass/fail
+      do not reset or restrict the sequence. Separate test IDs reset it;
+      metadata changes on the same ID do not. Ineligible attempts remain
+      present with NULL numbers and do not shift qualifying ordinals.
+
+      This ordinary view recomputes numbering over available history when
+      queried; historical inserts, corrected starts, restored context and
+      deletions may renumber subsequent attempts. It does not precompute the
+      window or guarantee lifetime history. Apply dashboard filters only
+      downstream. No student-role filter or result joins are applied here.
+      Attempt, domain, subdomain and question reports separately left join
+      this ordinal by exam_attempt_id alongside context, without recalculating
+      it. Readiness remains independent. Persistence
+      and representative computation-cost measurements are separate work.
+    columns:
+      - name: exam_attempt_id
+        description: Source Django ExamTestAttempt primary key, inherited from context.
+        data_tests:
+          - unique
+          - not_null
+          - relationships:
+              to: ref('mart_measureup_attempt_context')
+              field: exam_attempt_id
+      - name: attempt_number
+        description: >
+          Nullable UInt64 chronological ordinal: 1 for the earliest qualifying
+          attempt in a learner/course/exact-test sequence. Equal starts use
+          ascending numeric attempt PK via toUInt64OrZero, not lexical String
+          order; unparseable ID strings convert to 0. NULL when
+          required identity, context or start is unresolved. Lower-grain
+          consumers must inherit this value by exam_attempt_id, never rank
+          after joining results.
   - name: mart_measureup_attempt_context
     description: >
       Shared reusable transformation: one row per current exam attempt,

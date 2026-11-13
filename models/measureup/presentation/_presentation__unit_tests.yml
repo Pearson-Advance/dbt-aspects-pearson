@@ -7,15 +7,24 @@ unit_tests:
       a name wins, and the attempt is not duplicated. It has three question
       results: one correct, one incorrect and one with a null score, so correct
       is 1 and total is 3. Its derived end is calculated from start plus
-      duration. Attempt 2 is incomplete and carries recorded finish/duration
-      values, but must not receive a derived end. Attempt 3 was launched by an
-      instructor and must not appear. Attempt 4 is marked finished and has a
-      valid duration but no source finish timestamp, so it must not receive a
-      derived end. Uses format: sql throughout; dbt-clickhouse 1.9.4 on
-      dbt-core 1.9.11 fails with a "get_expected_sql takes not more than 2
-      argument(s)" compiler error on the inline list-of-dicts rows: format.
+      duration, and its supplied ordinal 3 is preserved. Attempt 2 is incomplete
+      and carries recorded finish/duration values, but must not receive a
+      derived end. Its profile name falls back to the username and its missing
+      numbering row must yield NULL without removing the attempt. Attempt 3 was
+      launched by an instructor and must not appear. Attempt 4 is marked
+      finished and has a valid duration but no source finish timestamp, so it
+      must not receive a derived end. It also has no numbering row. Uses
+      format: sql throughout; dbt-clickhouse 1.9.4 on dbt-core 1.9.11 fails with
+      a "get_expected_sql takes not more than 2 argument(s)" compiler error on
+      the inline list-of-dicts rows: format.
     model: rpt_measureup_attempts
     given:
+      - input: ref("mart_measureup_attempt_numbering")
+        format: sql
+        rows: |
+          select '1' as exam_attempt_id, toNullable(toUInt64(3)) as attempt_number
+          union all
+          select '3', toNullable(toUInt64(2))
       - input: ref("mart_measureup_attempt_context")
         format: sql
         rows: |
@@ -119,7 +128,8 @@ unit_tests:
             true as has_licensed_class_context, '200' as institution_ccx_id,
             '5' as institution_id, '30' as license_id, 'Class A' as class_name,
             'Jane Doe' as student_name, 'jdoe' as student_username,
-            toUInt64(1) as correct, toUInt64(3) as total
+            toUInt64(1) as correct, toUInt64(3) as total,
+            toNullable(toUInt64(3)) as attempt_number
         union all
         select
             '2', '100', 'Active Test',
@@ -139,15 +149,15 @@ unit_tests:
             true, '5001', 'ccx-v1:A+2026',
             true, '200', '5', '30', 'Class A',
             'nprofile', 'nprofile',
-            toUInt64(0), toUInt64(0)
-        union all
-        select
+            toUInt64(0), toUInt64(0), cast(null as Nullable(UInt64))
+          union all
+          select
             '4', '100', 'Active Test',
             'PROD-1', 'finished',
             '2026-01-04T00:00:00Z',
             cast(null as Nullable(String)),
             parseDateTime64BestEffortOrNull(
-                '2026-01-04T00:00:00Z', 6, 'UTC'
+              '2026-01-04T00:00:00Z', 6, 'UTC'
             ),
             cast(null as Nullable(DateTime64(6, 'UTC'))),
             '00:10:00',
@@ -157,15 +167,16 @@ unit_tests:
             true, '5003', 'ccx-v1:A+2026',
             true, '200', '5', '30', 'Class A',
             'No Finish', 'nofinish',
-            toUInt64(0), toUInt64(0)
+            toUInt64(0), toUInt64(0), cast(null as Nullable(UInt64))
 
   - name: test_rpt_measureup_domain_performance_does_not_duplicate_domains
     description: >
       One attempt with two domain results must produce exactly two output
       rows, not four — proves the join back to
-      mart_measureup_attempt_context (a 1:1 lookup) does not multiply the
+      context and numbering marts (1:1 lookups) does not multiply the
       1-to-many relationship between an attempt and its domain results.
       A third domain result, from an instructor's attempt, must not appear.
+      Both student results inherit ordinal 3, not separate result ranks.
     model: rpt_measureup_domain_performance
     given:
       - input: ref("int_measureup_exam_attempt_domain_current")
@@ -182,6 +193,12 @@ unit_tests:
           select '1000' as source_id, 'Reading' as name
           union all
           select '1001', 'Math'
+      - input: ref("mart_measureup_attempt_numbering")
+        format: sql
+        rows: |
+          select '1' as exam_attempt_id, toNullable(toUInt64(3)) as attempt_number
+          union all
+          select '2', toNullable(toUInt64(2))
       - input: ref("mart_measureup_attempt_context")
         format: sql
         rows: |
@@ -211,14 +228,15 @@ unit_tests:
             'Reading' as exam_domain_name, '75' as average_score,
             '100' as exam_test_id, 'Active Test' as exam_test_name, 'finished' as flow_state,
             'True' as is_passed, true as has_lti_context, true as has_licensed_class_context,
-            '200' as institution_ccx_id, '5' as institution_id, '30' as license_id
+            '200' as institution_ccx_id, '5' as institution_id, '30' as license_id,
+            toNullable(toUInt64(3)) as attempt_number
         union all
         select
             '11', '1', '1001',
             'Math', '82',
             '100', 'Active Test', 'finished',
             'True', true, true,
-            '200', '5', '30'
+            '200', '5', '30', toNullable(toUInt64(3))
 
   - name: test_rpt_measureup_subdomain_performance_does_not_duplicate_subdomains
     description: >
@@ -226,7 +244,7 @@ unit_tests:
       two output rows — proves the two-hop join back to the attempt
       (attempt_subdomain -> attempt_domain -> mart) does not multiply
       rows. A third subdomain result, from an instructor's attempt, must
-      not appear.
+      not appear. Both student subdomain rows inherit ordinal 3.
     model: rpt_measureup_subdomain_performance
     given:
       - input: ref("int_measureup_exam_attempt_subdomain_current")
@@ -249,6 +267,12 @@ unit_tests:
           select '10' as source_id, '1000' as exam_domain_id, '1' as exam_attempt_id, '75' as average_score
           union all
           select '11', '1000', '2', '100'
+      - input: ref("mart_measureup_attempt_numbering")
+        format: sql
+        rows: |
+          select '1' as exam_attempt_id, toNullable(toUInt64(3)) as attempt_number
+          union all
+          select '2', toNullable(toUInt64(2))
       - input: ref("mart_measureup_attempt_context")
         format: sql
         rows: |
@@ -279,7 +303,8 @@ unit_tests:
             '1' as exam_attempt_id, '1000' as exam_domain_id,
             '100' as exam_test_id, 'Active Test' as exam_test_name, 'finished' as flow_state,
             'True' as is_passed, true as has_lti_context, true as has_licensed_class_context,
-            '200' as institution_ccx_id, '5' as institution_id, '30' as license_id
+            '200' as institution_ccx_id, '5' as institution_id, '30' as license_id,
+            toNullable(toUInt64(3)) as attempt_number
         union all
         select
             '21', '10', '2001',
@@ -287,7 +312,7 @@ unit_tests:
             '1', '1000',
             '100', 'Active Test', 'finished',
             'True', true, true,
-            '200', '5', '30'
+            '200', '5', '30', toNullable(toUInt64(3))
 
   - name: test_rpt_measureup_question_performance_does_not_duplicate_questions
     description: >
@@ -297,7 +322,7 @@ unit_tests:
       confirms score stays nullable rather than defaulting to a value, the
       domain/subdomain names and the attempt's mode, dates and class come
       through, and a third question from an instructor's attempt is
-      dropped.
+      dropped. Both student question rows inherit ordinal 3.
     model: rpt_measureup_question_performance
     given:
       - input: ref("int_measureup_exam_question_attempt_current")
@@ -343,6 +368,12 @@ unit_tests:
         format: sql
         rows: |
           select '1000' as source_id, 'Reading' as name
+      - input: ref("mart_measureup_attempt_numbering")
+        format: sql
+        rows: |
+          select '1' as exam_attempt_id, toNullable(toUInt64(3)) as attempt_number
+          union all
+          select '2', toNullable(toUInt64(2))
       - input: ref("mart_measureup_attempt_context")
         format: sql
         rows: |
@@ -386,7 +417,7 @@ unit_tests:
             true as has_lti_context, 'ccx-v1:A+2026' as lti_course_id,
             true as has_licensed_class_context,
             '200' as institution_ccx_id, '5' as institution_id, '30' as license_id,
-            'Class A' as class_name
+            'Class A' as class_name, toNullable(toUInt64(3)) as attempt_number
         union all
         select
             '31', '20', '3001',
@@ -405,7 +436,7 @@ unit_tests:
             true, 'ccx-v1:A+2026',
             true,
             '200', '5', '30',
-            'Class A'
+            'Class A', toNullable(toUInt64(3))
 
   - name: test_rpt_measureup_exam_readiness_stays_independent_of_attempts
     description: >
