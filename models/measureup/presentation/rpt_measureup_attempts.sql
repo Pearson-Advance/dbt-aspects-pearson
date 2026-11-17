@@ -59,6 +59,7 @@ with
 
 select
     mart.exam_attempt_id as exam_attempt_id,
+    numbering.attempt_number as attempt_number,
     mart.exam_test_id as exam_test_id,
     mart.exam_test_name as exam_test_name,
     mart.exam_test_product_id as exam_test_product_id,
@@ -105,6 +106,9 @@ select
     coalesce(question_summary.total, 0) as total
 
 from attempt_context as mart
+left join
+    {{ ref("mart_measureup_attempt_numbering") }} as numbering
+    on mart.exam_attempt_id = numbering.exam_attempt_id
 left join
     (
         select

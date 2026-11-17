@@ -9,7 +9,7 @@
 
 {#
     Dashboard-ready grain: one row per current attempt-domain result.
-    Both joins are FK-to-source_id, at most 1:1 — cannot multiply
+    All joins are by unique source or attempt IDs, at most 1:1 — cannot multiply
     attempt_domain rows.
 
     Only results of attempts classified as 'student' are kept, the same
@@ -20,6 +20,7 @@
 select
     attempt_domain.source_id as attempt_domain_id,
     attempt_domain.exam_attempt_id as exam_attempt_id,
+    numbering.attempt_number as attempt_number,
     attempt_domain.exam_domain_id as exam_domain_id,
     exam_domain.name as exam_domain_name,
     attempt_domain.average_score as average_score,
@@ -41,4 +42,7 @@ left join
 left join
     {{ ref("mart_measureup_attempt_context") }} as mart
     on attempt_domain.exam_attempt_id = mart.exam_attempt_id
+left join
+    {{ ref("mart_measureup_attempt_numbering") }} as numbering
+    on mart.exam_attempt_id = numbering.exam_attempt_id
 where mart.attempt_user_type = 'student'
