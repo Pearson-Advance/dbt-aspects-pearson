@@ -21,9 +21,20 @@ clean-targets:
   - "dbt_packages"
   - "logs"
 
+unit_tests:
+  dbt_aspects_pearson:
+    pss_insights:
+      reporting:
+        +enabled: "{{ var('pss_reporting_enabled', false) }}"
+
 # Keep the project default deliberately conservative. Models that must be
 # persisted as ClickHouse materialized views opt in explicitly with
 # config(materialized="materialized_view", ...).
 models:
   dbt_aspects_pearson:
+    pss_insights:
+      reporting:
+        # Enable after PADV-3833..3836 supply the contracts listed in the reporting README.
+        +enabled: "{{ var('pss_reporting_enabled', false) }}"
+        +tags: ["pss_insights", "pss_reporting"]
     +materialized: view

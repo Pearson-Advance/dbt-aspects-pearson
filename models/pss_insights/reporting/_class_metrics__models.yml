@@ -1,0 +1,89 @@
+version: 2
+
+models:
+  - name: rpt_pss_class_metrics
+    description: >
+      One current row per CCX in the PADV-3833 class population, including
+      empty classes. Apply class and institution access through an authorized
+      class-key filter before aggregating. Several instructor assignments can
+      authorize the same class. The four-hour replacement refresh follows the
+      learner, delivery and practice-subdomain materialized views. Fractions
+      range from zero to one. Use learner rows for master-course learner counts
+      and final pass rates.
+    columns:
+      - name: ccx_id
+        description: Stable CCX identifier for the class.
+        data_tests: [unique, not_null]
+      - name: institution_id
+        description: Institution scope for access checks and aggregation.
+      - name: master_course
+        description: Master course reported by the PADV-3833 class contract.
+      - name: reporting_date
+        description: UTC calendar date when the current snapshot was calculated.
+      - name: is_active
+        description: >
+          Reporting date between effective CCX start and end, including both
+          endpoints. NULL when either date is missing. Use the date columns
+          with pss_class_active_on for a different reporting date.
+      - name: registered_learners
+        description: Number of distinct eligible class members in the current roster.
+      - name: readiness_available
+        description: >
+          Number of roster members in a calculated readiness band. The three
+          band proportions use this denominator pending business review.
+      - name: readiness_unavailable
+        description: Registered learners without a calculated readiness band.
+      - name: pct_on_target
+        description: On Target learners divided by readiness_available. NULL at zero denominator.
+      - name: class_risk
+        description: >
+          Low at 80% On Target or above, Medium from 70% up to 80%, and High
+          below 70%. An unavailable proportion leaves risk NULL.
+        data_tests:
+          - accepted_values:
+              values: ["Low", "Medium", "High"]
+      - name: requires_attention
+        description: True for Medium and High risk. NULL when risk is unavailable.
+      - name: support_reasons
+        description: >
+          For High risk, every available Quiz, Lab or Practice Exam average
+          below 70%. Compare to twelve fractional decimal places to suppress
+          floating-point noise at the threshold.
+      - name: requires_instructor_support
+        description: >
+          True when there is a triggering reason. NULL if the risk is unknown
+          or if a High-risk class has no score evidence for any eligible type.
+      - name: avg_course_grade
+        description: Mean available current LMS course grade among registered learners.
+      - name: avg_content_progress
+        description: Mean available share of applicable published units visited per registered learner.
+      - name: avg_quiz_score
+        description: Mean available current learner-activity Quiz score.
+      - name: avg_lab_score
+        description: Mean available current learner-activity Lab score.
+      - name: avg_practice_exam_score
+        description: Mean available score over eligible practice-mode Practice Exam attempts.
+      - name: avg_final_exam_score
+        description: Mean available score over qualifying Final Exam attempts.
+      - name: weakest_practice_subdomain_name
+        description: >
+          Practice subdomain with the lowest pooled correct/total item count
+          among roster members. Ties use domain ID, then subdomain ID. A class
+          with no eligible practice items has a NULL subdomain and score.
+      - name: final_pass_rate
+        description: >
+          Distinct learners with a qualifying pass divided by distinct learners
+          with a qualifying attempt. NULL when there are no attempts or a
+          learner's attempt/pass evidence could change the result. The attempted
+          and passed counts reflect known evidence.
+      - name: catalog_status
+        description: Complete, incomplete or unavailable published inventory. See int_pss_class_catalog_coverage.
+      - name: total_activities
+        description: Count of applicable published activities when catalog coverage is complete.
+      - name: completed_activities
+        description: >
+          Count attempted by every registered learner. NULL for empty rosters,
+          incomplete catalogs or indeterminate completion. A complete, genuinely
+          empty inventory with a nonempty roster returns zero.
+      - name: remaining_activities
+        description: Total minus completed, including applicable activities with zero attempts.

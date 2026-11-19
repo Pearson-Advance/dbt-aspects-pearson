@@ -1,0 +1,25 @@
+version: 2
+
+models:
+  - name: int_pss_reporting_roster
+    description: Current distinct registered, resolved class memberships supplied by PADV-3833.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [ccx_id, actor_id]
+    columns:
+      - name: ccx_id
+        data_tests: [not_null]
+      - name: actor_id
+        data_tests: [not_null]
+  - name: int_pss_reporting_class_coverage
+    description: Optional reconciled all-time navigation and Final Exam telemetry coverage at CCX grain.
+    columns:
+      - name: ccx_id
+        data_tests: [unique, not_null]
+  - name: int_pss_reporting_coverage
+    description: Verified UTC attempt intervals per CCX and master subsection. NULL bounds certify unbounded history in that direction.
+    columns:
+      - name: ccx_id
+        data_tests: [not_null]
+      - name: subsection_block_id
+        data_tests: [not_null]

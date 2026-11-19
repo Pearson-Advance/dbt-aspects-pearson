@@ -1,0 +1,68 @@
+version: 2
+
+models:
+  - name: int_pss_learner_attempt_summary
+    description: >
+      Observed qualifying Final Exam and eligible practice-mode attempts per CCX and actor.
+      Each PADV-3835 input row represents one distinct attempt. The native final uses its
+      configured mark. MeasureUp uses the attempt's test-version cut score. A missing
+      threshold, missing/invalid score, unsupported provider/rule or disagreement with a
+      recorded MeasureUp pass flag leaves the attempt unresolved. The learner remains in
+      the attempted population. An absent MeasureUp flag permits use of the exam threshold.
+
+  - name: int_pss_learner_navigation
+    description: >
+      Current registered class membership with observed unique visits to units in the
+      master course's latest publish. Matches the exact class key on the event and either
+      representation of the published unit's usage key. Repeated visits and visits to
+      removed units contribute no additional units. Validate the master inventory's
+      applicability to the class and the navigation feed before asserting coverage.
+      This snapshot measures visits and carries no date-range completion history.
+
+  - name: rpt_pss_learner_progress
+    description: >
+      One row per currently registered (ccx_id, actor_id) with its institution and
+      master course. An atomic four-hour replacement refresh reads the LMS grade,
+      navigation, PADV-3835 current scores and distinct attempts, and PADV-3836
+      readiness. Authorize classes before grouping learners across them.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [ccx_id, actor_id]
+    columns:
+      - name: ccx_id
+        data_tests: [not_null]
+      - name: actor_id
+        data_tests: [not_null]
+      - name: course_grade
+        description: Latest LMS course-grade fraction. Missing grades or differing grades tied at the latest timestamp stay null.
+      - name: content_progress
+        description: Distinct visited published units divided by published units, from zero to one. Null without verified coverage or a positive denominator.
+      - name: published_unit_count
+        description: Distinct units in the latest master-course structure. Null when no published unit inventory is available.
+      - name: observed_visited_unit_count
+        description: Distinct registered-learner visits to those units observed in this class, including when coverage remains unverified.
+      - name: visited_unit_count
+        description: Observed distinct units when coverage is verified. A registered learner with no visits then has zero.
+      - name: readiness_status
+        description: PADV-3836 band. Unavailable readiness remains null.
+      - name: readiness_unavailable_reason
+        description: PADV-3836 coverage reason, or readiness_unavailable when the input supplies none.
+      - name: qualifying_final_attempts
+        description: Observed qualifying Final Exam attempts, including attempts with an unresolved pass result.
+      - name: final_unresolved_attempts
+        description: Observed qualifying Final Exam attempts with insufficient or conflicting pass evidence.
+      - name: final_attempted
+        description: One for an observed qualifying Final Exam attempt, zero for none with verified coverage, otherwise null.
+      - name: final_passed
+        description: >
+          Provisional any-pass rule. One established pass suffices. Zero requires all
+          qualifying attempts to have known failing outcomes and verified coverage.
+          Null for no attempts or when the available evidence cannot establish an outcome.
+      - name: quiz_score_sum
+        description: Sum of available current Quiz score fractions across activities. Divide by quiz_score_count to obtain their mean.
+      - name: lab_score_sum
+        description: Sum of available current Lab score fractions across activities, paired with lab_score_count.
+      - name: practice_score_sum
+        description: Sum of available eligible Practice Exam attempt score fractions, paired with practice_score_count.
+      - name: final_score_sum
+        description: Sum of available qualifying Final Exam attempt score fractions, paired with final_score_count.
