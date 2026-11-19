@@ -1,0 +1,11 @@
+<clickhouse>
+    <logger><level>warning</level><console>1</console></logger>
+    <listen_host>127.0.0.1</listen_host>
+    <http_port from_env="PSS_FIXTURE_PORT"/>
+    <path from_env="PSS_FIXTURE_DATA"/>
+    <background_schedule_pool_size>12</background_schedule_pool_size>
+    <user_directories><users_xml><path from_env="PSS_FIXTURE_USERS"/></users_xml></user_directories>
+    <profiles><default><max_threads>4</max_threads></default></profiles>
+    <users><default><password/><networks><ip>127.0.0.1</ip></networks><profile>default</profile><quota>default</quota></default></users>
+    <quotas><default/></quotas>
+</clickhouse>

@@ -1,0 +1,148 @@
+unit_tests:
+  - name: test_pss_qualifying_attempts_use_exam_policy
+    model: int_pss_learner_attempt_summary
+    config: &test_config
+      enabled: "{{ var('pss_reporting_enabled', false) }}"
+      tags: [pss_insights]
+    given:
+      - input: ref('int_pss_class_context')
+        format: sql
+        rows: |
+          select * from values('ccx_id String, master_course String', ('N','native-course'), ('M','mup-course'), ('U','unknown'))
+      - input: ref('int_pss_grading_policy')
+        format: sql
+        rows: |
+          select * from values(
+            'master_course String, activity_type String, final_exam_pass_rule Nullable(String), final_exam_pass_mark Nullable(Float64)',
+            ('native-course','Final Exam','native_pass_mark',80),
+            ('mup-course','Final Exam','measureup_cut_score',NULL)
+          )
+      - input: ref('rpt_pss_activity_attempts')
+        format: sql
+        rows: |
+          select * from values(
+            'ccx_id String, actor_id String, activity_type String, provider String, score_pct Nullable(Float64), is_passed Nullable(Bool), cut_score Nullable(Float64), is_qualifying_final Bool, is_eligible_practice Bool',
+            ('N','1','Final Exam','native',80,NULL,NULL,true,false),
+            ('N','1','Final Exam','native',75,NULL,NULL,true,false),
+            ('N','1','Final Exam','native',100,NULL,NULL,false,false),
+            ('N','1','Practice Exam','measureup',50,false,90,false,true),
+            ('N','1','Practice Exam','measureup',100,true,90,false,false),
+            ('M','2','Final Exam','measureup',75,true,75,true,false),
+            ('M','2','Final Exam','measureup',75,false,75,true,false),
+            ('M','3','Final Exam','measureup',75,false,80,true,false),
+            ('M','4','Final Exam','measureup',50,true,NULL,true,false),
+            ('M','5','Final Exam','measureup',75,NULL,75,true,false),
+            ('U','6','Final Exam','native',100,NULL,NULL,true,false)
+          )
+    expect:
+      format: sql
+      rows: |
+        select * from values(
+          'ccx_id String, actor_id String, qualifying_final_attempts UInt64, passed_final_attempts UInt64, final_unresolved_attempts UInt64, final_score_sum Float64, final_score_count UInt64, practice_score_sum Float64, practice_score_count UInt64',
+          ('N','1',2,1,0,1.55,2,0.5,1),
+          ('M','2',2,1,1,1.5,2,0,0), ('M','3',1,0,0,0.75,1,0,0),
+          ('M','4',1,0,1,0.5,1,0,0), ('M','5',1,1,0,0.75,1,0,0),
+          ('U','6',1,0,1,1,1,0,0)
+        )
+
+  - name: test_pss_visited_published_units
+    model: int_pss_learner_navigation
+    config: *test_config
+    given:
+      - input: ref('int_pss_class_context')
+        format: sql
+        rows: |
+          select concat('ccx-v1:O+C+R+ccx@',id) as ccx_id, 'course-v1:O+C+R' as master_course
+          from values('id String', ('1'), ('2'))
+      - input: ref('int_pss_reporting_roster')
+        format: sql
+        rows: |
+          select concat('ccx-v1:O+C+R+ccx@',id) as ccx_id, actor_id
+          from values('id String, actor_id String', ('1','a'), ('1','b'), ('2','a'))
+      - input: ref('int_pss_reporting_class_coverage')
+        format: sql
+        rows: |
+          select 'ccx-v1:O+C+R+ccx@1' as ccx_id, true as navigation_complete
+      - input: ref('dim_course_blocks')
+        format: sql
+        rows: |
+          select 'course-v1:O+C+R' as course_key, concat('block-v1:O+C+R+type@vertical+block@',id) as block_id,
+                 'unit' as block_type, in_latest_publish
+          from values('id String, in_latest_publish Bool', ('u',true), ('v',true), ('deleted',false))
+      - input: ref('fact_learner_page_visits')
+        format: sql
+        rows: |
+          select concat('ccx-v1:O+C+R+ccx@',class_id) as course_key, 'a' as actor_id, block_id
+          from values('class_id String, block_id String',
+            ('1','ccx-block-v1:O+C+R+ccx@1+type@vertical+block@u'),
+            ('1','block-v1:O+C+R+type@vertical+block@u'),
+            ('1','block-v1:O+C+R+type@vertical+block@deleted'),
+            ('2','ccx-block-v1:O+C+R+ccx@1+type@vertical+block@v'))
+    expect:
+      format: sql
+      rows: |
+        select concat('ccx-v1:O+C+R+ccx@',id) as ccx_id, actor_id, toUInt64(2) as published_unit_count,
+               observed_visited_unit_count, visited_unit_count, content_progress
+        from values('id String, actor_id String, observed_visited_unit_count UInt64, visited_unit_count Nullable(UInt64), content_progress Nullable(Float64)',
+            ('1','a',1,1,0.5), ('1','b',0,0,0), ('2','a',0,NULL,NULL))
+
+  - name: test_pss_progress_distinguishes_no_attempts_unknown_and_retakes
+    model: rpt_pss_learner_progress
+    config: *test_config
+    given:
+      - input: ref('int_pss_class_context')
+        format: sql
+        rows: |
+          select * from values('ccx_id String, institution_id String, master_course String', ('N','i','m'), ('U','i','m'))
+      - input: ref('int_pss_reporting_roster')
+        format: sql
+        rows: |
+          select * from values('ccx_id String, actor_id String', ('N','retake'), ('N','none'), ('N','unknown'), ('U','none'), ('U','win'), ('U','fail'))
+      - input: ref('int_pss_reporting_class_coverage')
+        format: sql
+        rows: |
+          select 'N' as ccx_id, true as final_attempts_complete
+      - input: ref('dim_learner_most_recent_course_grade')
+        format: sql
+        rows: |
+          select 'N' as course_key, * from values(
+            'actor_id String, emission_time UInt64, course_grade Nullable(Float64)',
+            ('retake',0,0.875), ('retake',1,0.0),
+            ('unknown',0,0.75), ('unknown',1,NULL),
+            ('none',1,0.50), ('none',1,0.75))
+      - input: ref('rpt_pss_activity_scores_current')
+        format: sql
+        rows: |
+          select 'N' as ccx_id, 'retake' as actor_id, * from values(
+            'activity_type String, score_pct Nullable(Float64)', ('Quiz',0), ('Quiz',NULL), ('Lab',50))
+      - input: ref('int_pss_learner_attempt_summary')
+        format: sql
+        rows: |
+          select * from values(
+            'ccx_id String, actor_id String, qualifying_final_attempts UInt64, passed_final_attempts UInt64, final_unresolved_attempts UInt64, practice_score_sum Float64, practice_score_count UInt64, final_score_sum Float64, final_score_count UInt64',
+            ('N','retake',3,1,1,0.5,1,1.5,3), ('N','unknown',1,0,1,0,0,0,0),
+            ('U','win',1,1,0,0,0,0.75,1), ('U','fail',1,0,0,0,0,0,1))
+      - input: ref('rpt_pss_learner_readiness_current')
+        format: sql
+        rows: |
+          select 'N' as ccx_id, * from values(
+            'actor_id String, readiness_status Nullable(String), readiness_unavailable_reason Nullable(String)',
+            ('retake','On Target',NULL), ('unknown',NULL,'no_weights'))
+      - input: ref('int_pss_learner_navigation')
+        format: sql
+        rows: |
+          select * from values(
+            'ccx_id String, actor_id String, published_unit_count Nullable(UInt64), observed_visited_unit_count UInt64, visited_unit_count Nullable(UInt64), content_progress Nullable(Float64)',
+            ('N','retake',2,1,1,0.5), ('N','unknown',2,0,0,0), ('N','none',2,0,0,0), ('U','none',NULL,0,NULL,NULL),
+            ('U','win',NULL,0,NULL,NULL), ('U','fail',NULL,0,NULL,NULL))
+    expect:
+      format: sql
+      rows: |
+        select 'i' as institution_id, 'm' as master_course, * from values(
+          'ccx_id String, actor_id String, course_grade Nullable(Float64), published_unit_count Nullable(UInt64), observed_visited_unit_count UInt64, visited_unit_count Nullable(UInt64), content_progress Nullable(Float64), readiness_status Nullable(String), readiness_unavailable_reason Nullable(String), quiz_score_sum Float64, quiz_score_count UInt64, lab_score_sum Float64, lab_score_count UInt64, practice_score_sum Float64, practice_score_count UInt64, final_score_sum Float64, final_score_count UInt64, qualifying_final_attempts UInt64, final_unresolved_attempts UInt64, final_attempted Nullable(UInt8), final_passed Nullable(UInt8)',
+          ('N','retake',0,2,1,1,0.5,'On Target',NULL,0,1,0.5,1,0.5,1,1.5,3,3,1,1,1),
+          ('N','unknown',NULL,2,0,0,0,NULL,'no_weights',0,0,0,0,0,0,0,0,1,1,1,NULL),
+          ('N','none',NULL,2,0,0,0,NULL,'readiness_unavailable',0,0,0,0,0,0,0,0,0,0,0,NULL),
+          ('U','none',NULL,NULL,0,NULL,NULL,NULL,'readiness_unavailable',0,0,0,0,0,0,0,0,0,0,NULL,NULL),
+          ('U','win',NULL,NULL,0,NULL,NULL,NULL,'readiness_unavailable',0,0,0,0,0,0,0.75,1,1,0,1,1),
+          ('U','fail',NULL,NULL,0,NULL,NULL,NULL,'readiness_unavailable',0,0,0,0,0,0,0,1,1,0,1,NULL))

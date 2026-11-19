@@ -1,0 +1,64 @@
+version: 2
+
+models:
+  - name: int_pss_class_catalog_coverage
+    description: >
+      Current published inventory coverage per CCX, including classes with no catalog
+      rows. Checks the current master publication and graded/tagged subsection mapping
+      against that class's published catalog. A class with published subsections and
+      no graded or activity-tagged subsections has a verified zero under this inventory
+      definition. No published subsections means unavailable. Untagged, conflicting,
+      invalid or otherwise unmatched classifications mean incomplete. CCX applicability
+      follows PADV-3834. Stored on the four-hour replacement schedule.
+    columns:
+      - name: ccx_id
+        data_tests: [not_null, unique]
+      - name: catalog_status
+        data_tests:
+          - accepted_values:
+              values: ["complete", "incomplete", "unavailable"]
+      - name: known_published_activities
+        description: Number of catalogued activities. A partial count when coverage is incomplete.
+
+  - name: rpt_pss_class_activity_delivery
+    description: >
+      Current registered roster and current published activity catalog, one row per
+      CCX and logical master subsection. Repeated attempts count once per registered
+      learner for participation. The stored snapshot uses all observed attempts.
+      pss_class_activity_delivery(start, end) recalculates participation and the
+      observed attempt average for UTC bounds [start, end), with the same current
+      roster, catalog, and current-score difficulty. One coverage interval must
+      contain the requested window. For the all-history snapshot both ends must be
+      certified. Even with a gap, observing all roster members proves participation.
+      Add delivery_complete only for complete inventories and fully determined
+      activities. Consult int_pss_class_catalog_coverage for classes with no rows.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: ["ccx_id", "subsection_block_id"]
+    columns:
+      - name: ccx_id
+        data_tests: [not_null]
+      - name: subsection_block_id
+        data_tests: [not_null]
+      - name: activity_sequence
+        description: Published order assigned by PADV-3834. Sort Quiz and Lab difficulty by this column.
+        data_tests: [not_null]
+      - name: registered_learners
+        description: Number of distinct current eligible roster members of the class.
+      - name: observed_attempted_learners
+        description: Distinct eligible participants observed. A lower bound in an uncertified window.
+      - name: attempted_learners
+        description: Exact participation count. NULL when the observed count could be incomplete.
+      - name: telemetry_complete
+        description: At least one certified contiguous coverage interval spans the requested period.
+      - name: delivery_complete
+        description: Every registered learner participated. NULL for an empty roster or an unknown result.
+      - name: avg_score_pct
+        description: >
+          Difficulty, on a 0–100 scale. Mean of the available current learner/activity
+          scores, equally weighted per eligible learner. Always a snapshot.
+      - name: avg_attempt_score_pct
+        description: >
+          Mean of available observed attempt scores (0–100), equally weighted per
+          distinct PADV-3835 attempt in the requested period. Check telemetry_complete
+          before interpreting this as the mean for all attempts.

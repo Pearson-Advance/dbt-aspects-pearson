@@ -33,3 +33,5 @@ Materialized views should opt in within the SQL model, for example:
 ```
 
 The actual engine, ordering key, partitioning, and replacement/version column must be selected from the model's update semantics rather than copied mechanically.
+
+The [PSS reporting contract](pss_insights/reporting/README.md) documents class and master-course metrics, their upstream inputs and the fixture build.

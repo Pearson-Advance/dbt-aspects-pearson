@@ -1,0 +1,52 @@
+# Synthetic inputs for a single licensed class, one learner, and two graded
+# activities. These relations exist only inside the disposable fixture project.
+int_pss_class_context: |
+  select 'ccx-v1:O+C+R+ccx@1' as ccx_id, 'course-v1:O+C+R' as master_course,
+    'I' as institution_id, 'IC' as institution_ccx_id, 'Class' as class_name,
+    'L' as license_id, 'active' as license_status,
+    toDate('2020-01-01') as class_start, toDate('2100-01-01') as class_end
+int_pss_learner_class_context: |
+  select 'ccx-v1:O+C+R+ccx@1' as ccx_id, toNullable('learner') as actor_id, true as is_registered
+int_pss_activity_catalog: |
+  select 'ccx-v1:O+C+R+ccx@1' as ccx_id, 'course-v1:O+C+R' as master_course, *,
+    subsection_block_id as subsection_name, section_course_order as subsection_course_order,
+    toUInt64(section_course_order) as activity_sequence, true as in_latest_publish
+  from values('subsection_block_id String, activity_type String, section_course_order Int32',
+    ('quiz','Quiz',1), ('final','Final Exam',2))
+int_pss_activity_type_coverage: |
+  select master_course, subsection_block_id, 'classified' as coverage_status, in_latest_publish
+  from {{ ref('int_pss_activity_catalog') }}
+int_pss_grading_policy: |
+  select 'course-v1:O+C+R' as master_course, 'Final Exam' as activity_type,
+    'native_pass_mark' as final_exam_pass_rule, toNullable(75.) as final_exam_pass_mark
+dim_course_blocks: |
+  select 'course-v1:O+C+R' as course_key, *, true as in_latest_publish
+  from values('block_id String, block_type String, graded Bool',
+    ('block-v1:O+C+R+type@vertical+block@u', 'unit', 0),
+    ('quiz', 'subsection', 1), ('final', 'subsection', 1))
+fact_learner_page_visits: |
+  select 'ccx-v1:O+C+R+ccx@1' as course_key, 'learner' as actor_id,
+    'ccx-block-v1:O+C+R+ccx@1+type@vertical+block@u' as block_id
+dim_learner_most_recent_course_grade: |
+  select 'ccx-v1:O+C+R+ccx@1' as course_key, 'learner' as actor_id,
+    0.8 as course_grade, toDateTime('2026-11-01', 'UTC') as emission_time
+rpt_pss_activity_attempts: |
+  select 'ccx-v1:O+C+R+ccx@1' as ccx_id, 'learner' as actor_id, 'final' as subsection_block_id,
+    toDateTime('2026-11-01', 'UTC') as attempted_at, 'Final Exam' as activity_type,
+    'native' as provider, toNullable(80.) as score_pct, true as is_qualifying_final,
+    false as is_eligible_practice, cast(null as Nullable(UInt8)) as is_passed,
+    cast(null as Nullable(Float64)) as cut_score
+rpt_pss_activity_scores_current: |
+  select 'ccx-v1:O+C+R+ccx@1' as ccx_id, 'learner' as actor_id, 'final' as subsection_block_id,
+    'Final Exam' as activity_type, toNullable(80.) as score_pct
+rpt_pss_learner_readiness_current: |
+  select 'ccx-v1:O+C+R+ccx@1' as ccx_id, 'learner' as actor_id,
+    'On Target' as readiness_status, cast(null as Nullable(String)) as readiness_unavailable_reason
+rpt_pss_practice_subdomain_results: |
+  select 'ccx-v1:O+C+R+ccx@1' as ccx_id, 'learner' as actor_id, 'D' as domain_id,
+    'SD' as subdomain_id, 'Subdomain' as subdomain_name, 1 as correct_items, 2 as total_items
+fixture_class_coverage: |
+  select 'ccx-v1:O+C+R+ccx@1' as ccx_id, true as navigation_complete, true as final_attempts_complete
+fixture_activity_coverage: |
+  select ccx_id, subsection_block_id, cast(null as Nullable(DateTime64(6, 'UTC'))) as coverage_start,
+    cast(null as Nullable(DateTime64(6, 'UTC'))) as coverage_end from {{ ref('int_pss_activity_catalog') }}

@@ -1,0 +1,37 @@
+unit_tests:
+  - name: test_pss_class_catalog_coverage
+    model: int_pss_class_catalog_coverage
+    description: >
+      An untagged graded subsection leaves a partial catalog. A fully published
+      ungraded course has zero eligible activities. Absent structure stays
+      unavailable and historical subsections are excluded.
+    given:
+      - input: ref('int_pss_class_context')
+        format: sql
+        rows: |
+          select * from values('ccx_id String, institution_id String, master_course String',
+            ('A', 'I', 'M'), ('B', 'I', 'N'), ('C', 'I', 'O'), ('D', 'I', 'P'))
+      - input: ref('dim_course_blocks')
+        format: sql
+        rows: |
+          select * from values('course_key String, block_id String, block_type String, graded Bool, in_latest_publish Bool',
+            ('M', 'Q', 'subsection', 1, 1), ('M', 'L', 'subsection', 1, 1),
+            ('N', 'R', 'subsection', 0, 1), ('N', 'X', 'subsection', 1, 0),
+            ('O', 'Y', 'subsection', 1, 0), ('P', 'Z', 'subsection', 1, 1))
+      - input: ref('int_pss_activity_type_coverage')
+        format: sql
+        rows: |
+          select * from values('master_course String, subsection_block_id String, coverage_status String, in_latest_publish Bool',
+            ('M', 'Q', 'classified', 1), ('M', 'L', 'untagged', 1),
+            ('N', 'X', 'untagged', 0), ('P', 'Z', 'classified', 1))
+      - input: ref('int_pss_activity_catalog')
+        format: sql
+        rows: |
+          select * from values('ccx_id String, master_course String, subsection_block_id String, in_latest_publish Bool',
+            ('A','M','Q',1), ('B','N','X',0), ('D','P','Z',1))
+    expect:
+      format: sql
+      rows: |
+        select * from values('ccx_id String, institution_id String, master_course String, known_published_activities UInt64, catalog_status String',
+          ('A', 'I', 'M', 1, 'incomplete'), ('B', 'I', 'N', 0, 'complete'),
+          ('C', 'I', 'O', 0, 'unavailable'), ('D', 'I', 'P', 1, 'complete'))
