@@ -1,0 +1,150 @@
+# Fixtures use format: sql (dbt-clickhouse 1.9.4 fails on list-of-dicts rows,
+# see course_licensing/core/classes/_classes__unit_tests.yml), so expected rows
+# list every model column. Taxonomy 10 = activity type, 20 = another taxonomy.
+unit_tests:
+  - name: test_pss_object_activity_type_precedence
+    description: >
+      Single tag; retagged (two assignments, highest id wins); unrecognized
+      value; renamed tag read through the tag id; other taxonomies ignored.
+    model: int_pss_object_activity_type
+    overrides:
+      vars:
+        pss_activity_type_taxonomy_id: 10
+    given:
+      - input: ref("int_tags_object_tag_current")
+        format: sql
+        rows: |
+          select toInt32(1) as id, 'block-v1:O+C+R+type@sequential+block@single' as object_id,
+              toInt32(10) as taxonomy, toInt32(101) as tag, 'Quiz' as _value, '["Quiz"]' as lineage
+          union all select 5, 'block-v1:O+C+R+type@sequential+block@retag', 10, 102, 'Lab', '["Lab"]'
+          union all select 9, 'block-v1:O+C+R+type@sequential+block@retag', 10, 101, 'Quiz', '["Quiz"]'
+          union all select 3, 'block-v1:O+C+R+type@sequential+block@odd', 10, 199, 'Homework', '["Homework"]'
+          union all select 4, 'block-v1:O+C+R+type@sequential+block@renamed', 10, 103, 'Practice exam', '["Practice exam"]'
+          union all select 6, 'block-v1:O+C+R+type@sequential+block@other', 20, 201, 'Apply', '["Apply"]'
+      - input: ref("dim_most_recent_tags")
+        format: sql
+        rows: |
+          select toInt32(101) as id, toInt32(10) as taxonomy, toInt32(0) as parent, 'Quiz' as value, '' as external_id, '["Quiz"]' as lineage
+          union all select 102, 10, 0, 'Lab', '', '["Lab"]'
+          union all select 103, 10, 0, 'Practice Exam', '', '["Practice Exam"]'
+    expect:
+      format: sql
+      rows: |
+        select 'block-v1:O+C+R+type@sequential+block@single' as object_id,
+            toInt32(1) as activity_type_object_tag_id, toInt32(101) as activity_type_tag_id,
+            'Quiz' as activity_type_value, true as is_recognized_value,
+            toUInt64(1) as activity_type_assignment_count
+        union all select 'block-v1:O+C+R+type@sequential+block@retag', 9, 101, 'Quiz', true, 2
+        union all select 'block-v1:O+C+R+type@sequential+block@odd', 3, 199, 'Homework', false, 1
+        union all select 'block-v1:O+C+R+type@sequential+block@renamed', 4, 103, 'Practice Exam', true, 1
+
+  - name: test_pss_activity_catalog
+    description: >
+      Two classes of one master course get every graded subsection with a
+      recognized type, including never-attempted ones and one no longer in
+      the latest publish (null sequence and section). Untagged, not graded,
+      unrecognized and other-course subsections are excluded. CCX block keys
+      are built per class.
+    model: int_pss_activity_catalog
+    given:
+      - input: ref("int_pss_class_scope")
+        format: sql
+        rows: |
+          select '1' as institution_ccx_id, '7' as institution_id, cast('3' as Nullable(String)) as license_id,
+              cast('active' as Nullable(String)) as license_status, 'ccx-v1:O+C+R+ccx@11' as ccx_id,
+              'Class A' as class_name, cast('course-v1:O+C+R' as Nullable(String)) as master_course, '11' as ccx_number
+          union all select '2', '7', '3', 'active', 'ccx-v1:O+C+R+ccx@12', 'Class B', 'course-v1:O+C+R', '12'
+      - input: ref("int_pss_master_course_scope")
+        format: sql
+        rows: |
+          select cast('course-v1:O+C+R' as Nullable(String)) as master_course
+      - input: ref("dim_course_blocks")
+        format: sql
+        rows: |
+          select 'course-v1:O+C+R' as course_key, 'block-v1:O+C+R+type@sequential+block@s1' as block_id,
+              'Quiz 1' as block_name, 'block-v1:O+C+R+type@chapter+block@c1' as section_block_id,
+              toInt32(1) as section_course_order, toInt32(10) as course_order, true as in_latest_publish,
+              'subsection' as block_type, true as graded
+          union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@sequential+block@s2', 'Lab 1', 'block-v1:O+C+R+type@chapter+block@c1', 1, 20, true, 'subsection', true
+          union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@sequential+block@old', 'Old exam', 'block-v1:O+C+R+type@chapter+block@c9', 9, 5, false, 'subsection', true
+          union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@sequential+block@untagged', 'Untagged', 'block-v1:O+C+R+type@chapter+block@c1', 1, 30, true, 'subsection', true
+          union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@sequential+block@notgraded', 'Reading', 'block-v1:O+C+R+type@chapter+block@c1', 1, 40, true, 'subsection', false
+          union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@sequential+block@odd', 'Odd', 'block-v1:O+C+R+type@chapter+block@c1', 1, 50, true, 'subsection', true
+          union all select 'course-v1:X+Y+Z', 'block-v1:X+Y+Z+type@sequential+block@s9', 'Other course', '', 1, 10, true, 'subsection', true
+      - input: ref("int_pss_object_activity_type")
+        format: sql
+        rows: |
+          select 'block-v1:O+C+R+type@sequential+block@s1' as object_id, toInt32(1) as activity_type_object_tag_id,
+              'Quiz' as activity_type_value, true as is_recognized_value
+          union all select 'block-v1:O+C+R+type@sequential+block@s2', 2, 'Lab', true
+          union all select 'block-v1:O+C+R+type@sequential+block@old', 3, 'Final Exam', true
+          union all select 'block-v1:O+C+R+type@sequential+block@notgraded', 4, 'Quiz', true
+          union all select 'block-v1:O+C+R+type@sequential+block@odd', 5, 'Homework', false
+          union all select 'block-v1:X+Y+Z+type@sequential+block@s9', 6, 'Quiz', true
+    expect:
+      format: sql
+      rows: |
+        select '1' as institution_ccx_id, '7' as institution_id, cast('3' as Nullable(String)) as license_id,
+            cast('active' as Nullable(String)) as license_status, 'ccx-v1:O+C+R+ccx@11' as ccx_id,
+            'Class A' as class_name, 'course-v1:O+C+R' as master_course,
+            'block-v1:O+C+R+type@sequential+block@s1' as subsection_block_id,
+            'ccx-block-v1:O+C+R+ccx@11+type@sequential+block@s1' as ccx_subsection_block_id,
+            'Quiz 1' as subsection_name,
+            cast('block-v1:O+C+R+type@chapter+block@c1' as Nullable(String)) as section_block_id,
+            cast(1 as Nullable(Int32)) as section_course_order, toInt32(10) as subsection_course_order,
+            cast(1 as Nullable(UInt64)) as activity_sequence, 'Quiz' as activity_type,
+            true as in_latest_publish, toInt32(1) as activity_type_object_tag_id
+        union all select '1', '7', '3', 'active', 'ccx-v1:O+C+R+ccx@11', 'Class A', 'course-v1:O+C+R', 'block-v1:O+C+R+type@sequential+block@s2', 'ccx-block-v1:O+C+R+ccx@11+type@sequential+block@s2', 'Lab 1', 'block-v1:O+C+R+type@chapter+block@c1', 1, 20, 2, 'Lab', true, 2
+        union all select '1', '7', '3', 'active', 'ccx-v1:O+C+R+ccx@11', 'Class A', 'course-v1:O+C+R', 'block-v1:O+C+R+type@sequential+block@old', 'ccx-block-v1:O+C+R+ccx@11+type@sequential+block@old', 'Old exam', null, null, 5, null, 'Final Exam', false, 3
+        union all select '2', '7', '3', 'active', 'ccx-v1:O+C+R+ccx@12', 'Class B', 'course-v1:O+C+R', 'block-v1:O+C+R+type@sequential+block@s1', 'ccx-block-v1:O+C+R+ccx@12+type@sequential+block@s1', 'Quiz 1', 'block-v1:O+C+R+type@chapter+block@c1', 1, 10, 1, 'Quiz', true, 1
+        union all select '2', '7', '3', 'active', 'ccx-v1:O+C+R+ccx@12', 'Class B', 'course-v1:O+C+R', 'block-v1:O+C+R+type@sequential+block@s2', 'ccx-block-v1:O+C+R+ccx@12+type@sequential+block@s2', 'Lab 1', 'block-v1:O+C+R+type@chapter+block@c1', 1, 20, 2, 'Lab', true, 2
+        union all select '2', '7', '3', 'active', 'ccx-v1:O+C+R+ccx@12', 'Class B', 'course-v1:O+C+R', 'block-v1:O+C+R+type@sequential+block@old', 'ccx-block-v1:O+C+R+ccx@12+type@sequential+block@old', 'Old exam', null, null, 5, null, 'Final Exam', false, 3
+
+  - name: test_pss_activity_type_coverage
+    description: >
+      One row per graded or tagged subsection with its coverage_status and
+      component profile; ungraded untagged subsections are left out.
+    model: int_pss_activity_type_coverage
+    given:
+      - input: ref("int_pss_master_course_scope")
+        format: sql
+        rows: |
+          select cast('course-v1:O+C+R' as Nullable(String)) as master_course
+      - input: ref("dim_course_blocks")
+        format: sql
+        rows: |
+          select 'course-v1:O+C+R' as course_key, 'block-v1:O+C+R+type@sequential+block@ok' as block_id,
+              'OK' as block_name, toInt32(10) as course_order, true as graded, true as in_latest_publish,
+              'subsection' as block_type, 'block-v1:O+C+R+type@sequential+block@ok' as subsection_block_id
+          union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@problem+block@p1', 'P1', 11, true, true, 'problem', 'block-v1:O+C+R+type@sequential+block@ok'
+          union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@lti_consumer+block@l1', 'L1', 12, true, true, 'lti_consumer', 'block-v1:O+C+R+type@sequential+block@ok'
+          union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@scorm+block@x1', 'X1', 13, true, true, 'scorm', 'block-v1:O+C+R+type@sequential+block@ok'
+          union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@html+block@h1', 'H1', 14, true, true, 'html', 'block-v1:O+C+R+type@sequential+block@ok'
+          union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@vertical+block@u1', 'U1', 11, true, true, 'unit', 'block-v1:O+C+R+type@sequential+block@ok'
+          union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@sequential+block@untagged', 'Untagged', 20, true, true, 'subsection', 'block-v1:O+C+R+type@sequential+block@untagged'
+          union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@sequential+block@notgraded', 'Reading', 30, false, true, 'subsection', 'block-v1:O+C+R+type@sequential+block@notgraded'
+          union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@sequential+block@odd', 'Odd', 40, true, true, 'subsection', 'block-v1:O+C+R+type@sequential+block@odd'
+          union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@sequential+block@twice', 'Twice', 50, true, true, 'subsection', 'block-v1:O+C+R+type@sequential+block@twice'
+          union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@sequential+block@plain', 'Plain', 60, false, true, 'subsection', 'block-v1:O+C+R+type@sequential+block@plain'
+      - input: ref("int_pss_object_activity_type")
+        format: sql
+        rows: |
+          select 'block-v1:O+C+R+type@sequential+block@ok' as object_id, toInt32(1) as activity_type_object_tag_id,
+              'Quiz' as activity_type_value, true as is_recognized_value, toUInt64(1) as activity_type_assignment_count
+          union all select 'block-v1:O+C+R+type@sequential+block@notgraded', 2, 'Quiz', true, 1
+          union all select 'block-v1:O+C+R+type@sequential+block@odd', 3, 'Homework', false, 1
+          union all select 'block-v1:O+C+R+type@sequential+block@twice', 9, 'Lab', true, 2
+    expect:
+      format: sql
+      rows: |
+        select 'course-v1:O+C+R' as master_course, 'block-v1:O+C+R+type@sequential+block@ok' as subsection_block_id,
+            'OK' as subsection_name, toInt32(10) as subsection_course_order, true as graded,
+            true as in_latest_publish, cast('Quiz' as Nullable(String)) as activity_type_value,
+            cast(1 as Nullable(Int32)) as activity_type_object_tag_id,
+            toUInt64(1) as activity_type_assignment_count, 'classified' as coverage_status,
+            toUInt64(1) as problem_count, toUInt64(1) as lti_consumer_count,
+            toUInt64(0) as skillable_xblock_count, toUInt64(1) as other_component_count
+        union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@sequential+block@untagged', 'Untagged', 20, true, true, null, null, 0, 'untagged', 0, 0, 0, 0
+        union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@sequential+block@notgraded', 'Reading', 30, false, true, 'Quiz', 2, 1, 'tagged_not_graded', 0, 0, 0, 0
+        union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@sequential+block@odd', 'Odd', 40, true, true, 'Homework', 3, 1, 'unrecognized_value', 0, 0, 0, 0
+        union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@sequential+block@twice', 'Twice', 50, true, true, 'Lab', 9, 2, 'multiple_tags', 0, 0, 0, 0

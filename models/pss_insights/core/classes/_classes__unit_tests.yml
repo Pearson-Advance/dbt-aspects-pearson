@@ -1,0 +1,35 @@
+# Fixtures use format: sql (dbt-clickhouse 1.9.4 fails on list-of-dicts rows,
+# see course_licensing/core/classes/_classes__unit_tests.yml), so expected rows
+# list every model column.
+unit_tests:
+  - name: test_pss_class_scope_population
+    description: >
+      Soft-deleted classes are excluded; all license statuses are kept; an
+      empty master_course falls back to the course key in the CCX key and is
+      flagged.
+    model: int_pss_class_scope
+    given:
+      - input: ref("int_course_licensing_institution_ccx_current")
+        format: sql
+        rows: |
+          select '1' as source_id, '7' as institution_id,
+              cast('3' as Nullable(String)) as license_id,
+              cast('disabled' as Nullable(String)) as license_status,
+              'ccx-v1:ORG+C1+R1+ccx@11' as ccx_id, 'Class A' as ccx_name,
+              cast('course-v1:ORG+C1+R1' as Nullable(String)) as master_course,
+              'False' as deleted
+          union all
+          select '2', '7', null, null, 'ccx-v1:ORG+C2+R2+ccx@12', 'Class B', '', 'False'
+          union all
+          select '3', '7', '3', 'active', 'ccx-v1:ORG+C1+R1+ccx@13', 'Deleted', 'course-v1:ORG+C1+R1', 'True'
+    expect:
+      format: sql
+      rows: |
+        select '1' as institution_ccx_id, '7' as institution_id,
+            cast('3' as Nullable(String)) as license_id,
+            cast('disabled' as Nullable(String)) as license_status,
+            'ccx-v1:ORG+C1+R1+ccx@11' as ccx_id, 'Class A' as class_name,
+            cast('course-v1:ORG+C1+R1' as Nullable(String)) as master_course,
+            false as master_course_from_ccx_key, '11' as ccx_number
+        union all
+        select '2', '7', null, null, 'ccx-v1:ORG+C2+R2+ccx@12', 'Class B', 'course-v1:ORG+C2+R2', true, '12'

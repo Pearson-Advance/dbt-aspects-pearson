@@ -1,0 +1,112 @@
+version: 2
+
+models:
+  - name: int_pss_object_activity_type
+    description: >
+      Activity type of each object tagged with the activity-type taxonomy
+      (var pss_activity_type_taxonomy_id), one row per object_id. When an
+      object holds several assignments, the most recent one wins.
+    columns:
+      - name: object_id
+        description: Tagged object key; for the activity catalog, a subsection usage key (block-v1).
+        data_tests:
+          - unique
+          - not_null
+      - name: activity_type_object_tag_id
+        description: ObjectTag id of the winning assignment.
+      - name: activity_type_tag_id
+        description: Tag id of the winning assignment.
+      - name: activity_type_value
+        description: Current tag value (a renamed tag is picked up through its id).
+      - name: is_recognized_value
+        description: True when the value is one of the accepted activity types (var pss_activity_types).
+      - name: activity_type_assignment_count
+        description: >
+          Activity-type assignments in ClickHouse for this object. Deletions
+          are not exported, so more than one usually means a stale tag.
+
+  - name: int_pss_activity_catalog
+    description: >
+      One row per class (CCX) and graded subsection of its master course with
+      a recognized activity type. Includes activities nobody has attempted and
+      subsections no longer in the latest publish.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: ["ccx_id", "subsection_block_id"]
+    columns:
+      - name: ccx_id
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('int_pss_class_scope')
+              field: ccx_id
+      - name: master_course
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('int_pss_master_course_scope')
+              field: master_course
+      - name: license_status
+        description: License status of the class, for filtering.
+      - name: subsection_block_id
+        description: Master-course subsection key (block-v1).
+        data_tests:
+          - not_null
+      - name: ccx_subsection_block_id
+        description: CCX form of the key (ccx-block-v1:...+ccx@N+type@...), as MeasureUp and xAPI report it.
+        data_tests:
+          - not_null
+      - name: section_block_id
+        description: Null when the subsection is no longer in the latest publish.
+      - name: section_course_order
+        description: Null when the subsection is no longer in the latest publish.
+      - name: activity_type
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: "{{ var('pss_activity_types') }}"
+      - name: activity_sequence
+        description: >
+          1-based order of the activity in its class, by subsection course
+          order, over published activities only; null when in_latest_publish
+          is false.
+      - name: in_latest_publish
+        data_tests:
+          - not_null
+      - name: activity_type_object_tag_id
+        description: ObjectTag id of the assignment that set the type.
+        data_tests:
+          - not_null
+
+  - name: int_pss_activity_type_coverage
+    description: >
+      One row per in-scope master-course subsection that is graded or carries
+      an activity-type tag, with its coverage_status and component profile.
+      Shows what is still pending tagging or needs review.
+    columns:
+      - name: master_course
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('int_pss_master_course_scope')
+              field: master_course
+      - name: subsection_block_id
+        data_tests:
+          - unique
+          - not_null
+      - name: coverage_status
+        data_tests:
+          - not_null
+          - accepted_values:
+              values:
+                - classified
+                - untagged
+                - tagged_not_graded
+                - unrecognized_value
+                - multiple_tags
+      - name: activity_type_assignment_count
+        description: 0 when untagged; more than 1 when several assignments exist.
+      - name: other_component_count
+        description: >
+          Components other than problem, lti_consumer, skillable_xblock, html
+          and video (e.g. scorm, sga, ora).

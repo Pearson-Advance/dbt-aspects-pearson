@@ -27,3 +27,27 @@ clean-targets:
 models:
   dbt_aspects_pearson:
     +materialized: view
+
+seeds:
+  dbt_aspects_pearson:
+    pss_insights:
+      +tags: ["pss_insights"]
+      pss_grading_policy:
+        +column_types:
+          master_course: String
+          activity_type: String
+          weight: Nullable(Float64)
+          final_exam_pass_rule: Nullable(String)
+          final_exam_pass_mark: Nullable(Float64)
+
+vars:
+  # PSS Insights. Taxonomies are selected by id: ids differ per environment
+  # and taxonomy names can be edited in Studio. An unset env var (0 / empty)
+  # means "not configured" and the dependent models return no rows.
+  # Id of the activity-type taxonomy ("PSS Activity Type").
+  pss_activity_type_taxonomy_id: "{{ env_var('PSS_ACTIVITY_TYPE_TAXONOMY_ID', '0') }}"
+  # Comma-separated ids of the subdomain taxonomies, one per certification,
+  # e.g. "30" or "30,31".
+  pss_subdomain_taxonomy_ids: "{{ env_var('PSS_SUBDOMAIN_TAXONOMY_IDS', '') }}"
+  # Accepted activity-type tag values (exact strings).
+  pss_activity_types: ["Quiz", "Lab", "Practice Exam", "Final Exam"]

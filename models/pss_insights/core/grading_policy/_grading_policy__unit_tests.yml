@@ -1,0 +1,22 @@
+unit_tests:
+  - name: test_pss_grading_policy_normalization
+    description: >
+      Values are trimmed and an empty pass rule becomes null. Uses format: sql
+      (see course_licensing/core/classes/_classes__unit_tests.yml for why).
+    model: int_pss_grading_policy
+    given:
+      - input: ref("pss_grading_policy")
+        format: sql
+        rows: |
+          select ' course-v1:O+C+R ' as master_course, 'Final Exam' as activity_type,
+              cast(40 as Nullable(Float64)) as weight,
+              cast('measureup_cut_score' as Nullable(String)) as final_exam_pass_rule,
+              cast(null as Nullable(Float64)) as final_exam_pass_mark
+          union all select 'course-v1:O+C+R', 'Quiz', 60, '', null
+    expect:
+      format: sql
+      rows: |
+        select 'course-v1:O+C+R' as master_course, 'Final Exam' as activity_type, toFloat64(40) as weight,
+            cast('measureup_cut_score' as Nullable(String)) as final_exam_pass_rule,
+            cast(null as Nullable(Float64)) as final_exam_pass_mark
+        union all select 'course-v1:O+C+R', 'Quiz', 60, null, null
