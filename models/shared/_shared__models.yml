@@ -1,0 +1,27 @@
+version: 2
+
+models:
+  - name: int_tags_object_tag_current
+    description: >
+      Current object-tag assignments, one row per ObjectTag id, with the tag
+      id that aspects-dbt's dim_most_recent_object_tags drops. Tag deletions
+      are not exported by the sink, so an assignment removed in Studio stays
+      here; re-adding a tag creates a new id.
+    columns:
+      - name: id
+        description: ObjectTag primary key.
+        data_tests:
+          - unique
+          - not_null
+      - name: object_id
+        description: Tagged object (block usage key, course key or library key).
+        data_tests:
+          - not_null
+      - name: taxonomy
+        description: Taxonomy id.
+      - name: tag
+        description: Tag id (0 for free-text taxonomies).
+      - name: _value
+        description: Tag text as stored on the ObjectTag when it was saved.
+      - name: lineage
+        description: JSON array of tag values from the root to this tag.

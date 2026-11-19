@@ -1,0 +1,61 @@
+version: 2
+
+models:
+  - name: int_pss_quiz_item_subdomain_map
+    description: >
+      One row per quiz item (master course, problem block) and domain or
+      subdomain, from the taxonomies in var pss_subdomain_taxonomy_ids. A
+      domain-only tag gives a row with a null subdomain. No item version id
+      reaches ClickHouse: in_latest_publish and in_course_structure stand in
+      for it. Open edX subdomains are not matched to MeasureUp subdomains;
+      external_id and lineage are exposed for that.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - problem_block_id
+            - taxonomy_id
+            - domain_tag_id
+            - subdomain_tag_id
+    columns:
+      - name: master_course
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('int_pss_master_course_scope')
+              field: master_course
+      - name: problem_block_id
+        data_tests:
+          - not_null
+      - name: in_course_structure
+        description: False for tags on blocks no longer in the course structure (stale tags).
+      - name: in_latest_publish
+        description: False for problems removed from the latest publish.
+      - name: domain_tag_id
+        description: Null only if the parent tag of a subdomain is missing.
+        data_tests:
+          - not_null:
+              config:
+                severity: warn
+      - name: subdomain_tag_id
+        description: Null for a domain-only tag.
+      - name: item_subdomain_count
+        description: >
+          Rows for this item across every configured taxonomy, to split
+          credit (1/n) or deduplicate downstream.
+        data_tests:
+          - not_null
+      - name: object_tag_id
+        description: Most recent ObjectTag id behind this row.
+
+  - name: int_pss_quiz_item_subdomain_coverage
+    description: >
+      One row per in-scope master course with graded problems in the latest
+      publish: how many carry a subdomain tag and how many don't.
+    columns:
+      - name: master_course
+        data_tests:
+          - unique
+          - not_null
+          - relationships:
+              to: ref('int_pss_master_course_scope')
+              field: master_course

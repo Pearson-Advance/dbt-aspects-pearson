@@ -1,0 +1,52 @@
+version: 2
+
+seeds:
+  - name: pss_grading_policy
+    description: >
+      Hand-maintained copy of each master course's Studio grading policy,
+      mapped to the PSS activity types. Current policy only; history lives in
+      git and changes go through a reviewed PR. Exactly 4 rows per course;
+      weights 0-100 summing to 100.
+    columns:
+      - name: master_course
+        description: course-v1 key, same value as int_pss_class_scope.master_course.
+      - name: activity_type
+        description: Quiz / Lab / Practice Exam / Final Exam.
+      - name: weight
+        description: >
+          Studio weight, 0-100, 0 allowed. When Studio assignment types don't
+          map one-to-one, the sum of the Studio weights mapped to this type.
+      - name: final_exam_pass_rule
+        description: Final Exam row only, native_pass_mark or measureup_cut_score.
+      - name: final_exam_pass_mark
+        description: 0-100, filled if and only if the rule is native_pass_mark.
+
+models:
+  - name: int_pss_grading_policy
+    description: >
+      One row per master course and activity type, read from the
+      pss_grading_policy seed. A course without rows has no policy:
+      consumers treat it as "policy missing", never as default weights.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: ["master_course", "activity_type"]
+    columns:
+      - name: master_course
+        data_tests:
+          - not_null
+      - name: activity_type
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: "{{ var('pss_activity_types') }}"
+      - name: weight
+        data_tests:
+          - not_null
+      - name: final_exam_pass_rule
+        description: >
+          How the Final Exam is passed: measureup_cut_score uses the exam's
+          MeasureUp cut_score and the attempt's is_passed; native_pass_mark
+          uses final_exam_pass_mark.
+        data_tests:
+          - accepted_values:
+              values: ["native_pass_mark", "measureup_cut_score"]

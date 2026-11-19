@@ -1,0 +1,109 @@
+# Fixtures use format: sql (dbt-clickhouse 1.9.4 fails on list-of-dicts rows,
+# see course_licensing/core/classes/_classes__unit_tests.yml), so expected rows
+# list every model column. Taxonomy 30 = subdomains, 20 = Blooms (not read).
+unit_tests:
+  - name: test_pss_quiz_item_subdomain_map
+    description: >
+      One subdomain; several subdomains; domain-only tag; domain + own
+      subdomain (domain dropped); repeated tag collapsed to the newest
+      assignment; untagged question absent; Blooms ignored; stale tag on a
+      block not in the structure; library and out-of-scope blocks ignored;
+      missing parent tag gives null domain columns.
+    model: int_pss_quiz_item_subdomain_map
+    overrides:
+      vars:
+        pss_subdomain_taxonomy_ids: "30"
+    given:
+      - input: ref("int_pss_master_course_scope")
+        format: sql
+        rows: |
+          select cast('course-v1:O+C+R' as Nullable(String)) as master_course
+      - input: ref("int_tags_object_tag_current")
+        format: sql
+        rows: |
+          select toInt32(1) as id, 'block-v1:O+C+R+type@problem+block@one' as object_id, toInt32(30) as taxonomy, toInt32(311) as tag
+          union all select 2, 'block-v1:O+C+R+type@problem+block@one', 30, 311
+          union all select 3, 'block-v1:O+C+R+type@problem+block@two', 30, 311
+          union all select 4, 'block-v1:O+C+R+type@problem+block@two', 30, 312
+          union all select 5, 'block-v1:O+C+R+type@problem+block@domonly', 30, 301
+          union all select 6, 'block-v1:O+C+R+type@problem+block@both', 30, 301
+          union all select 7, 'block-v1:O+C+R+type@problem+block@both', 30, 311
+          union all select 8, 'block-v1:O+C+R+type@problem+block@one', 20, 201
+          union all select 9, 'block-v1:O+C+R+type@problem+block@gone', 30, 311
+          union all select 10, 'lb:O:LIB:problem:one', 30, 311
+          union all select 11, 'block-v1:X+Y+Z+type@problem+block@out', 30, 311
+          union all select 12, 'block-v1:O+C+R+type@problem+block@orphan', 30, 399
+      - input: ref("dim_most_recent_tags")
+        format: sql
+        rows: |
+          select toInt32(301) as id, toInt32(30) as taxonomy, toInt32(0) as parent, 'Domain 1' as value,
+              'D1' as external_id, '["Domain 1"]' as lineage
+          union all select 311, 30, 301, '1.1 Controls', 'D1.1', '["Domain 1", "1.1 Controls"]'
+          union all select 312, 30, 301, '1.2 Concepts', 'D1.2', '["Domain 1", "1.2 Concepts"]'
+          union all select 399, 30, 398, '9.9 Orphan', 'D9.9', '["Domain 9", "9.9 Orphan"]'
+          union all select 201, 20, 0, 'Apply', '', '["Apply"]'
+      - input: ref("dim_course_blocks")
+        format: sql
+        rows: |
+          select 'course-v1:O+C+R' as course_key, 'block-v1:O+C+R+type@problem+block@one' as block_id,
+              'block-v1:O+C+R+type@sequential+block@s1' as subsection_block_id, true as graded,
+              true as in_latest_publish, 'problem' as block_type
+          union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@problem+block@two', 'block-v1:O+C+R+type@sequential+block@s1', true, true, 'problem'
+          union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@problem+block@domonly', 'block-v1:O+C+R+type@sequential+block@s1', true, true, 'problem'
+          union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@problem+block@both', 'block-v1:O+C+R+type@sequential+block@s1', true, true, 'problem'
+          union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@problem+block@untagged', 'block-v1:O+C+R+type@sequential+block@s1', true, true, 'problem'
+          union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@problem+block@orphan', 'block-v1:O+C+R+type@sequential+block@s1', true, true, 'problem'
+      - input: ref("dim_most_recent_taxonomies")
+        format: sql
+        rows: |
+          select toInt32(30) as id, 'CompTIA Security+ (SY0701)' as name
+    expect:
+      format: sql
+      rows: |
+        select 'course-v1:O+C+R' as master_course, 'block-v1:O+C+R+type@problem+block@one' as problem_block_id,
+            cast('block-v1:O+C+R+type@sequential+block@s1' as Nullable(String)) as subsection_block_id,
+            true as graded, true as in_latest_publish, true as in_course_structure,
+            toInt32(30) as taxonomy_id, cast('CompTIA Security+ (SY0701)' as Nullable(String)) as taxonomy_name,
+            cast(301 as Nullable(Int32)) as domain_tag_id, cast('Domain 1' as Nullable(String)) as domain_name,
+            cast('D1' as Nullable(String)) as domain_external_id,
+            cast(311 as Nullable(Int32)) as subdomain_tag_id,
+            cast('1.1 Controls' as Nullable(String)) as subdomain_name,
+            cast('D1.1' as Nullable(String)) as subdomain_external_id,
+            cast('["Domain 1", "1.1 Controls"]' as Nullable(String)) as lineage,
+            toUInt64(1) as item_subdomain_count, toInt32(2) as object_tag_id
+        union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@problem+block@two', 'block-v1:O+C+R+type@sequential+block@s1', true, true, true, 30, 'CompTIA Security+ (SY0701)', 301, 'Domain 1', 'D1', 311, '1.1 Controls', 'D1.1', '["Domain 1", "1.1 Controls"]', 2, 3
+        union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@problem+block@two', 'block-v1:O+C+R+type@sequential+block@s1', true, true, true, 30, 'CompTIA Security+ (SY0701)', 301, 'Domain 1', 'D1', 312, '1.2 Concepts', 'D1.2', '["Domain 1", "1.2 Concepts"]', 2, 4
+        union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@problem+block@domonly', 'block-v1:O+C+R+type@sequential+block@s1', true, true, true, 30, 'CompTIA Security+ (SY0701)', 301, 'Domain 1', 'D1', null, null, null, '["Domain 1"]', 1, 5
+        union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@problem+block@both', 'block-v1:O+C+R+type@sequential+block@s1', true, true, true, 30, 'CompTIA Security+ (SY0701)', 301, 'Domain 1', 'D1', 311, '1.1 Controls', 'D1.1', '["Domain 1", "1.1 Controls"]', 1, 7
+        union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@problem+block@gone', null, false, false, false, 30, 'CompTIA Security+ (SY0701)', 301, 'Domain 1', 'D1', 311, '1.1 Controls', 'D1.1', '["Domain 1", "1.1 Controls"]', 1, 9
+        union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@problem+block@orphan', 'block-v1:O+C+R+type@sequential+block@s1', true, true, true, 30, 'CompTIA Security+ (SY0701)', null, null, null, 399, '9.9 Orphan', 'D9.9', '["Domain 9", "9.9 Orphan"]', 1, 12
+
+  - name: test_pss_quiz_item_subdomain_coverage
+    description: >
+      Graded problems in the latest publish are counted per course, split by
+      whether the map has them; ungraded and unpublished problems are not
+      counted.
+    model: int_pss_quiz_item_subdomain_coverage
+    given:
+      - input: ref("int_pss_master_course_scope")
+        format: sql
+        rows: |
+          select cast('course-v1:O+C+R' as Nullable(String)) as master_course
+      - input: ref("dim_course_blocks")
+        format: sql
+        rows: |
+          select 'course-v1:O+C+R' as course_key, 'block-v1:O+C+R+type@problem+block@tagged' as block_id,
+              'problem' as block_type, true as graded, true as in_latest_publish
+          union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@problem+block@untagged', 'problem', true, true
+          union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@problem+block@ungraded', 'problem', false, true
+          union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@problem+block@removed', 'problem', true, false
+      - input: ref("int_pss_quiz_item_subdomain_map")
+        format: sql
+        rows: |
+          select 'block-v1:O+C+R+type@problem+block@tagged' as problem_block_id
+          union all select 'block-v1:O+C+R+type@problem+block@tagged'
+    expect:
+      format: sql
+      rows: |
+        select 'course-v1:O+C+R' as master_course, toUInt64(2) as graded_problem_count,
+            toUInt64(1) as tagged_graded_problem_count, toUInt64(1) as untagged_graded_problem_count
