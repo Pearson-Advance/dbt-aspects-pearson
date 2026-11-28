@@ -1,0 +1,54 @@
+unit_tests:
+  - name: test_pss_grading_policy_normalization
+    description: >
+      Values are trimmed and an empty pass rule becomes null. Uses format: sql
+      (see course_licensing/core/classes/_classes__unit_tests.yml for why).
+    model: int_pss_grading_policy_entries
+    given:
+      - input: ref("pss_grading_policy")
+        format: sql
+        rows: |
+          select ' course-v1:O+C+R ' as master_course, 'Final Exam' as activity_type,
+              cast(40 as Nullable(Float64)) as weight,
+              cast('measureup_cut_score' as Nullable(String)) as final_exam_pass_rule,
+              cast(null as Nullable(Float64)) as final_exam_pass_mark
+          union all select 'course-v1:O+C+R', 'Quiz', 60, '', null
+    expect:
+      format: sql
+      rows: |
+        select 'course-v1:O+C+R' as master_course, 'Final Exam' as activity_type, toFloat64(40) as weight,
+            cast('measureup_cut_score' as Nullable(String)) as final_exam_pass_rule,
+            cast(null as Nullable(Float64)) as final_exam_pass_mark
+        union all select 'course-v1:O+C+R', 'Quiz', 60, null, null
+
+  - name: test_pss_policy_coverage_sums_marks_and_missing_master
+    model: int_pss_grading_policy_coverage
+    given:
+      - input: ref("int_pss_master_course_scope")
+        format: sql
+        rows: |
+          select 'absent' as master_course
+      - input: ref("int_pss_grading_policy_entries")
+        format: sql
+        rows: |
+          select master_course, activity_type,
+                 multiIf(master_course = 'sum99' and activity_type = 'Final Exam', 29.,
+                         master_course = 'null_weight' and activity_type = 'Lab', null,
+                         master_course = 'bad_weight' and activity_type = 'Quiz', toFloat64('nan'),
+                         base_weight) as weight,
+                 if(activity_type = 'Final Exam',
+                    if(master_course = 'provider', 'measureup_cut_score', 'native_pass_mark'), null)
+                    as final_exam_pass_rule,
+                 if(activity_type = 'Final Exam' and master_course not in ('provider','no_mark'),
+                    toNullable(75.), null) as final_exam_pass_mark
+          from values('master_course String',('native'),('provider'),('sum99'),('no_mark'),('null_weight'),('bad_weight'),('no_lab')) as masters
+          cross join values('activity_type String, base_weight Float64',('Quiz',20),('Lab',0),('Practice Exam',50),('Final Exam',30)) as types
+          where not (master_course = 'no_lab' and activity_type = 'Lab')
+    expect:
+      format: sql
+      rows: |
+        select * from values('master_course String, policy_row_count UInt64, has_four_activity_types UInt8, weights_valid UInt8, final_rule_valid UInt8, policy_status String',
+          ('native',4,1,1,1,'configured'),('provider',4,1,1,1,'configured'),
+          ('sum99',4,1,0,1,'invalid'),('no_mark',4,1,1,0,'invalid'),
+          ('null_weight',4,1,0,1,'invalid'),('bad_weight',4,1,0,1,'invalid'),
+          ('no_lab',3,0,1,1,'invalid'),('absent',0,0,0,0,'missing'))

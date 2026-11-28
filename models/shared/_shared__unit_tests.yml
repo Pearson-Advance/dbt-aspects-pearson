@@ -1,0 +1,27 @@
+unit_tests:
+  - name: test_tags_object_tag_current_latest_dump_wins
+    description: >
+      Each ObjectTag id resolves to its newest dump; dump_id breaks a tie
+      between dumps with the same time_last_dumped. Uses format: sql (see
+      course_licensing/core/classes/_classes__unit_tests.yml for why).
+    model: int_tags_object_tag_current
+    given:
+      - input: source("event_sink", "object_tag")
+        format: sql
+        rows: |
+          select toInt32(1) as id, 'block-v1:O+C+R+type@problem+block@a' as object_id,
+              toInt32(10) as taxonomy, toInt32(101) as tag, 'Old' as _value, '["Old"]' as lineage,
+              toUUID('00000000-0000-0000-0000-000000000001') as dump_id,
+              '2026-01-01 00:00:00' as time_last_dumped
+          union all select 1, 'block-v1:O+C+R+type@problem+block@a', 10, 102, 'New', '["New"]',
+              toUUID('00000000-0000-0000-0000-000000000002'), '2026-01-02 00:00:00'
+          union all select 2, 'block-v1:O+C+R+type@problem+block@b', 10, 101, 'Tie low', '["Tie low"]',
+              toUUID('00000000-0000-0000-0000-000000000003'), '2026-01-03 00:00:00'
+          union all select 2, 'block-v1:O+C+R+type@problem+block@b', 10, 102, 'Tie high', '["Tie high"]',
+              toUUID('00000000-0000-0000-0000-000000000004'), '2026-01-03 00:00:00'
+    expect:
+      format: sql
+      rows: |
+        select toInt32(1) as id, 'block-v1:O+C+R+type@problem+block@a' as object_id,
+            toInt32(10) as taxonomy, toInt32(102) as tag, 'New' as _value, '["New"]' as lineage
+        union all select 2, 'block-v1:O+C+R+type@problem+block@b', 10, 102, 'Tie high', '["Tie high"]'

@@ -1,0 +1,109 @@
+version: 2
+
+models:
+  - name: int_pss_quiz_taxonomy_scope
+    description: >-
+      Approved reporting taxonomies per exact master course key and run in this environment.
+      Supply pss_quiz_taxonomies_by_master as a dbt dictionary or
+      PSS_QUIZ_TAXONOMIES_BY_MASTER as JSON, for example {"course-v1:ORG+C+R":[30]}.
+      Duplicate IDs are collapsed. An omitted master has no approved mappings.
+      The content owner approves the taxonomy IDs for each master-course run.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [master_course, taxonomy_id]
+
+  - name: int_pss_quiz_item_structure_coverage
+    description: >-
+      One row per currently classified master Quiz subsection. The expected problem
+      count comes from the exact published Studio snapshot, including ungraded
+      problems. The observed count uses distinct current Aspects problem blocks per
+      subsection. A match requires the subsection itself to exist. The upstream
+      structure carries no Studio snapshot ID. Equal counts alone cannot identify
+      a same-size item replacement or swap.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [master_course, subsection_block_id]
+    columns:
+      - name: structure_status
+        data_tests:
+          - accepted_values:
+              values: [counts_match, missing_expected_count, missing_subsection, problem_count_mismatch]
+
+  - name: int_pss_quiz_item_subdomain_map
+    description: >
+      One row per master problem and distinct approved taxonomy/domain/subdomain
+      assignment, including historical or unlinked problem keys for reconciliation.
+      Join its current subsection to a published, classified Quiz to attribute a
+      current Quiz. Removed problems have no verified historical subsection link.
+      Current problem rows from a Quiz subsection with conflicting or missing
+      structure evidence are withheld until the Aspects structure catches up.
+      LTI components are excluded until it is decided whether tagged LTI
+      components are mapped. A
+      domain-only tag gives a row with a null subdomain. No item version id
+      reaches ClickHouse. The flags describe observed course structure only. Open edX subdomains are not matched to MeasureUp subdomains;
+      external_id and lineage are exposed for that.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - problem_block_id
+            - taxonomy_id
+            - domain_tag_id
+            - subdomain_tag_id
+    columns:
+      - name: master_course
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('int_pss_master_course_scope')
+              field: master_course
+      - name: subsection_block_id
+        description: Current published parent when observable. Historical position-based matches are discarded.
+      - name: problem_block_id
+        data_tests:
+          - not_null
+      - name: in_course_structure
+        description: False for tags on blocks no longer in the course structure (stale tags).
+      - name: in_latest_publish
+        description: False for problems removed from the latest publish.
+      - name: domain_tag_id
+        description: Null when the expected top-level parent is missing, outside this taxonomy or nested below another tag.
+        data_tests:
+          - not_null:
+              config:
+                severity: warn
+      - name: subdomain_tag_id
+        description: Null for a domain-only tag.
+      - name: item_subdomain_count
+        description: >
+          Rows for this item across every configured taxonomy, to split
+          credit (1/n) or deduplicate downstream.
+        data_tests:
+          - not_null
+      - name: object_tag_id
+        description: Most recent ObjectTag id behind this row.
+
+  - name: int_pss_quiz_item_subdomain_coverage
+    description: >
+      Observed current graded problems per master and the subset under classified
+      Quiz subsections. A problem with several tags counts once. The Quiz breakdown
+      distinguishes child assignments, domain-only assignments and unmapped items.
+      The tagged counts are NULL when the target has no approved taxonomy for the
+      run or an approved taxonomy is absent from the target dictionary. A zero
+      problem count describes observed rows; publication completeness
+      comes from the master catalog coverage. No ObjectTag tombstone feed exists
+      to certify tag removal or recover attempt-time mappings.
+    columns:
+      - name: quiz_structure_status
+        description: >-
+          Missing or conflicting subsection counts withhold master mapping totals.
+          Incomplete activity classification or publication withholds Quiz totals.
+        data_tests:
+          - accepted_values:
+              values: [counts_match, structure_disagrees, classification_incomplete, publication_unavailable]
+      - name: master_course
+        data_tests:
+          - unique
+          - not_null
+          - relationships:
+              to: ref('int_pss_master_course_scope')
+              field: master_course

@@ -1,0 +1,17 @@
+unit_tests:
+  - name: test_pss_class_scope_uses_context
+    model: int_pss_class_scope
+    given:
+      - input: ref('int_pss_class_context')
+        format: sql
+        rows: |
+          select * from values(
+            'institution_ccx_id String, institution_id String, license_id String, license_status String, ccx_id String, class_name String, master_course Nullable(String), master_status String, class_scope_status String',
+            ('1','7','3','active','ccx-v1:O+C+R+ccx@11','Class','course-v1:O+C+R','ccx_key','in_scope'),
+            ('2','7','3','active','ccx-v1:O+C+R+ccx@12','Other',null,'duplicate_ccx','duplicate_ccx'))
+    expect:
+      format: sql
+      rows: |
+        select '1' as institution_ccx_id, '7' as institution_id, '3' as license_id, 'active' as license_status,
+          'ccx-v1:O+C+R+ccx@11' as ccx_id, 'Class' as class_name, toNullable('course-v1:O+C+R') as master_course,
+          true as master_course_from_ccx_key, '11' as ccx_number

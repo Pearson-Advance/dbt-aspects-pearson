@@ -1,0 +1,73 @@
+version: 2
+
+seeds:
+  - name: pss_grading_policy
+    description: >
+      Hand-maintained copy of each master course's Studio grading policy,
+      mapped to the PSS activity types. Current policy only; history lives in
+      git and changes go through a reviewed PR. Exactly 4 rows per course;
+      weights 0-100 summing to 100.
+    columns:
+      - name: master_course
+        description: course-v1 key, same value as int_pss_class_scope.master_course.
+      - name: activity_type
+        description: Quiz / Lab / Practice Exam / Final Exam.
+      - name: weight
+        description: >
+          Studio weight, 0-100, 0 allowed. When Studio assignment types don't
+          map one-to-one, the sum of the Studio weights mapped to this type.
+      - name: final_exam_pass_rule
+        description: Final Exam row only, native_pass_mark or measureup_cut_score.
+      - name: final_exam_pass_mark
+        description: 0-100, filled if and only if the rule is native_pass_mark.
+
+models:
+  - name: int_pss_grading_policy_entries
+    description: Normalized current policy seed entries, including invalid rows for reconciliation.
+
+  - name: int_pss_grading_policy_coverage
+    description: >-
+      One row per in-scope or configured master. Missing and invalid policies stay
+      observable while the catalog continues to publish applicable activities. A
+      configured policy has four distinct reporting types, finite 0–100 weights
+      totaling 100 and an exam-specific rule. A MeasureUp final refers to its
+      test version's cut score, supplied by the score models. Studio policy updates
+      require a new reviewed seed and dbt seed run. This view describes the
+      current policy at query time.
+    columns:
+      - name: master_course
+        data_tests: [unique, not_null]
+      - name: policy_status
+        data_tests:
+          - accepted_values:
+              values: [configured, invalid, missing]
+
+  - name: int_pss_grading_policy
+    description: >
+      One row per master course and activity type, read from the
+      validated pss_grading_policy seed. Consult int_pss_grading_policy_coverage
+      to distinguish missing and invalid policies before computing a weighted
+      score or a Final Exam pass rate.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: ["master_course", "activity_type"]
+    columns:
+      - name: master_course
+        data_tests:
+          - not_null
+      - name: activity_type
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: "{{ var('pss_activity_types') }}"
+      - name: weight
+        data_tests:
+          - not_null
+      - name: final_exam_pass_rule
+        description: >
+          The native_pass_mark rule uses final_exam_pass_mark. The
+          measureup_cut_score rule references the qualifying attempt's
+          MeasureUp test version. The score models supply the provider evidence.
+        data_tests:
+          - accepted_values:
+              values: ["native_pass_mark", "measureup_cut_score"]
