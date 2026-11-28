@@ -1,0 +1,107 @@
+version: 2
+
+models:
+  - name: int_pss_roster_evidence
+    description: >-
+      Restricted reconciliation view. One row per CCX and licensed LMS user, pending
+      invitation or unmatched enrollment key. Reads only current Course Licensing
+      records and the typed xAPI UUIDs in event_sink.external_id. Deduplicates dumps
+      and rejects identity collisions in either direction, including collisions with
+      users outside the roster. A disagreement between class keys produces a diagnostic
+      for each implicated in-scope class with the learner identity suppressed. Only
+      reconciliation operators should receive SELECT on this schema.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [ccx_id, record_key]
+    columns:
+      - name: record_key
+        description: Restricted user-prefixed LMS key, or the upstream enrollment key for invitations and mismatches.
+        data_tests: [not_null]
+      - name: source_enrollment_keys
+        description: Distinct keys in int_course_licensing_enrollment_current for reproducing this record at the same cutoff.
+      - name: identity_status
+        description: Reason only the resolved subset can join activity facts.
+        data_tests:
+          - accepted_values:
+              values: [resolved, invitation, missing_lms_user, no_xapi_uuid, shared_xapi_uuid, multiple_xapi_uuids, class_key_mismatch]
+
+  - name: int_pss_learner_class_context
+    description: >-
+      One current membership per resolved CCX and pseudonymous xAPI actor. A learner
+      shared by two classes occurs twice. The source is the licensed LMS roster,
+      independent of activity or teaching assignments. Join to the class by ccx_id.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [ccx_id, actor_id]
+    columns:
+      - name: ccx_id
+        description: Current Course Licensing CCX course key.
+        data_tests: [not_null]
+      - name: actor_id
+        description: Open edX ExternalId UUID for the xapi type, as a string for joining to Aspects actor_id.
+        data_tests: [not_null]
+      - name: is_registered
+        description: >-
+          1 for a resolved licensed member with only Active evidence. Inactive,
+          Expired and conflicting states remain NULL pending approval of the
+          enrollment state mapping. Pending invitations are available in coverage
+          only.
+      - name: enrollment_status
+        description: Single observed licensed status, or Conflicting where enrollment rows disagree.
+        data_tests:
+          - accepted_values:
+              values: [Active, Inactive, Expired, Conflicting]
+      - name: enrollment_states
+        description: Sorted distinct statuses observed across current enrollment records.
+      - name: source_enrollment_count
+        description: Distinct source enrollment keys contributing to this membership.
+
+  - name: int_pss_roster_coverage
+    description: >-
+      Current observed coverage per scoped CCX. Counts refer to distinct LMS users
+      except explicit invitation and record counts. They describe the ingested source
+      at query time. No upstream completion watermark certifies a full LMS extract.
+    columns:
+      - name: ccx_id
+        data_tests: [unique, not_null]
+      - name: registered_source_learners
+        description: Distinct identified LMS users whose current licensed enrollment records are unanimously Active.
+      - name: resolved_registered_learners
+        description: Registered source learners with a globally unique typed xAPI UUID.
+      - name: unresolved_registered_learners
+        description: Registered source learners with a missing or ambiguous typed xAPI UUID.
+      - name: pending_invitations
+        description: Distinct unclaimed invitations matched to this class. The count measures invitations, independent of the person count.
+      - name: missing_user_records
+        description: Source enrollment records which lack an LMS user key. A distinct learner count is unavailable for these records.
+      - name: scope_mismatch_records
+        description: Source enrollment records with mismatched class or institution keys.
+      - name: registration_policy_pending
+        description: Records outside the confirmed Active population, including conflicting enrollment states. The enrollment state mapping decision governs their eligibility.
+      - name: licensed_source_learners
+        description: Distinct matched licensed LMS users across all observed enrollment states.
+      - name: learners_with_active_state
+        description: Distinct matched LMS users with an Active row. Mixed-state users may appear in multiple state counts.
+      - name: learners_with_inactive_state
+        description: Distinct matched LMS users with an Inactive row.
+      - name: learners_with_expired_state
+        description: Distinct matched LMS users with an Expired row.
+      - name: roster_status
+        description: >-
+          Status of observed rows. Compare with source_reconciled to interpret absence.
+          The individual issue counts retain simultaneous exceptions.
+        data_tests:
+          - accepted_values:
+              values: [empty, pending_only, resolved, registration_policy_pending, identity_incomplete, class_key_mismatch, class_scope_unavailable]
+      - name: source_reconciled
+        description: >-
+          Calculated at query time, default 0. After target-wide LMS reconciliation
+          and approval of the refresh interval, set pss_roster_reconciled_until_utc
+          to the agreed expiry in UTC (YYYY-MM-DD HH:MM:SS) and rebuild this view.
+          Missing, invalid or expired attestations give 0. The operator must withdraw
+          approval and rebuild earlier if source delivery fails within that interval.
+      - name: registered_actor_denominator
+        description: >-
+          Distinct registered actors when the extract has been reconciled and every
+          eligible learner and class key is resolved. NULL otherwise. For a reconciled
+          empty or pending-only roster the denominator is zero.

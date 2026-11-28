@@ -83,11 +83,11 @@ make format-check
 
 ## Use from Tutor
 
-Configure Tutor to clone this repository instead of upstream `aspects-dbt`. Use an immutable release tag or commit for `DBT_BRANCH`:
+Configure Tutor to clone this repository instead of upstream `aspects-dbt`. Set `DBT_CLONE_URL` to its clone URL and choose an immutable release tag or commit for `DBT_BRANCH`.
 
 ```bash
 tutor config save \
-  --set "DBT_REPOSITORY=https://github.com/Pearson-Advance/dbt-aspects-pearson.git" \
+  --set "DBT_REPOSITORY=${DBT_CLONE_URL:?Set the dbt project clone URL}" \
   --set "DBT_BRANCH=replace-with-immutable-tag-or-commit"
 ```
 

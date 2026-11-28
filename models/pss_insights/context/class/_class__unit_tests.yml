@@ -1,0 +1,127 @@
+unit_tests:
+  - name: test_pss_class_population_and_provenance
+    model: int_pss_class_context
+    overrides:
+      vars:
+        pss_reporting_timezone: UTC
+    description: >
+      Keep missing and deleted licenses, recover a missing master from a
+      well-formed key, expose conflicts, and withhold ambiguous ownership.
+    given:
+      - input: ref('int_course_licensing_institution_ccx_current')
+        format: sql
+        rows: |
+          select source_id, ccx_id, institute as institution_id, master as master_course,
+                 license as license_id, 'disabled' as license_status,
+                 'Class' as ccx_name, deleted
+          from values(
+              'source_id String, ccx_id String, institute String, master Nullable(String), license Nullable(String), deleted String',
+              ('1', 'ccx-v1:A+B+C+ccx@1', 'i', 'course-v1:A+B+C', 'x', 'False'),
+              ('2', 'ccx-v1:A+B+C+ccx@2', 'i', NULL, 'gone', 'False'),
+              ('3', 'ccx-v1:A+B+C+ccx@3', 'i', 'course-v1:A+B+C', 'x', 'True'),
+              ('4', 'ccx-v1:A+B+C+ccx@4', 'i', 'course-v1:A+B+Wrong', NULL, 'False'),
+              ('5', 'bad', 'i', NULL, NULL, 'False'),
+              ('6', 'ccx-v1:A+B+C+ccx@6', 'i', NULL, NULL, 'False'),
+              ('7', 'ccx-v1:A+B+C+ccx@6', 'j', NULL, NULL, 'False'),
+              ('8', '', 'i', NULL, NULL, 'False'),
+              ('9', 'ccx-v1:A+B+C+ccx@9', 'i', NULL, 'other', 'False'),
+              ('10', 'ccx-v1:A+B+C+ccx@10', 'i', NULL, 'blank', 'False')
+          )
+      - input: ref('int_course_licensing_course_current')
+        format: sql
+        rows: |
+          select 'course-v1:A+B+C' as master_course_id from numbers(2)
+      - input: ref('int_course_licensing_institution_current')
+        format: sql
+        rows: |
+          select 'i' as source_id, 'True' as active
+      - input: ref('int_course_licensing_license_current')
+        format: sql
+        rows: |
+          select * from values('source_id String, institution_id String, status Nullable(String)',
+            ('x', 'i', 'deleted'), ('other', 'j', 'active'), ('blank', 'i', NULL))
+      - input: ref('int_pss_ccx_overview_dates')
+        format: sql
+        rows: |
+          select 'ccx-v1:A+B+C+ccx@1' as ccx_id, toNullable(toDate('2026-11-10')) as class_start,
+            toNullable(toDate('2026-11-12')) as class_end, 'available' as class_date_status,
+            '2026-11-01' as overview_dumped_at
+    expect:
+      format: sql
+      rows: |
+        select
+          *,
+          if(institution_ccx_id is null, null, 'Class') as class_name,
+          multiIf(institution_ccx_id = '1', 'course-v1:A+B+C', institution_ccx_id = '4', 'course-v1:A+B+Wrong', null) as assigned_master_course,
+          multiIf(institution_ccx_id = '1', 'x', institution_ccx_id = '2', 'gone', institution_ccx_id = '9', 'other', institution_ccx_id = '10', 'blank', null) as license_id,
+          if(institution_ccx_id is null, null, 'disabled') as class_license_status,
+          if(institution_ccx_id = '1', 'deleted', null) as current_license_status,
+          if(institution_ccx_id is null, 'missing', 'active') as institution_status,
+          if(institution_ccx_id is null, 2, 1) as source_row_count,
+          if(institution_ccx_id = '1', toDate('2026-11-10'), null) as class_start,
+          if(institution_ccx_id = '1', toDate('2026-11-12'), null) as class_end,
+          if(institution_ccx_id = '1', toDate(now(), 'UTC') between '2026-11-10' and '2026-11-12', null) as is_active_today,
+          if(institution_ccx_id = '1', '2026-11-01', null) as overview_dumped_at
+        from values(
+          'ccx_id String, institution_ccx_id Nullable(String), institution_id Nullable(String), master_course Nullable(String),
+           master_status String, master_in_catalog UInt8, license_status Nullable(String), license_record_status String,
+           class_scope_status String, class_date_status String',
+          ('ccx-v1:A+B+C+ccx@1', '1', 'i', 'course-v1:A+B+C', 'class_record', 1, 'deleted', 'status_mismatch', 'in_scope', 'available'),
+          ('ccx-v1:A+B+C+ccx@2', '2', 'i', 'course-v1:A+B+C', 'ccx_key', 1, 'disabled', 'missing_license', 'in_scope', 'missing_ccx_overview'),
+          ('ccx-v1:A+B+C+ccx@4', '4', 'i', NULL, 'conflicting_master', 0, NULL, 'no_license_id', 'in_scope', 'missing_ccx_overview'),
+          ('bad', '5', 'i', NULL, 'invalid_ccx_key', 0, NULL, 'no_license_id', 'in_scope', 'missing_ccx_overview'),
+          ('ccx-v1:A+B+C+ccx@6', NULL, NULL, NULL, 'duplicate_ccx', 0, NULL, 'duplicate_ccx', 'duplicate_ccx', 'missing_ccx_overview'),
+          ('ccx-v1:A+B+C+ccx@9', '9', 'i', 'course-v1:A+B+C', 'ccx_key', 1, NULL, 'conflicting_institution', 'in_scope', 'missing_ccx_overview'),
+          ('ccx-v1:A+B+C+ccx@10', '10', 'i', 'course-v1:A+B+C', 'ccx_key', 1, NULL, 'missing_current_status', 'in_scope', 'missing_ccx_overview')
+        )
+
+  - name: test_pss_overviews_use_latest_ccx_dates
+    model: int_pss_ccx_overview_dates
+    description: >
+      Prefer the CCX overview to a master publication and older CCX snapshots.
+      Replayed exports collapse. A cleared end, malformed date or inverted
+      interval cannot count a CCX as active. Interpret offsets before choosing
+      the reporting day.
+    overrides:
+      vars:
+        pss_reporting_timezone: UTC
+    given:
+      - input: source('event_sink', 'course_overviews')
+        format: sql
+        rows: |
+          select course_key, course_start, course_end, modified, modified as time_last_dumped,
+            toUUID('11111111-1111-1111-1111-111111111111') as dump_id
+          from values('course_key String, course_start String, course_end String, modified String',
+            ('course-v1:A+B+C', '2026-01-01', '2026-12-31', '2026-11-08'),
+            ('ccx-v1:A+B+C+ccx@1', '2026-11-08', '2026-11-13', '2026-11-01'),
+            ('ccx-v1:A+B+C+ccx@1', '2026-11-09T23:30:00-02:00', '2026-11-12', '2026-11-08'),
+            ('ccx-v1:A+B+C+ccx@1', '2026-11-09T23:30:00-02:00', '2026-11-12', '2026-11-08'),
+            ('ccx-v1:A+B+C+ccx@2', '2026-11-10', '2026-11-12', '2026-11-01'),
+            ('ccx-v1:A+B+C+ccx@2', '2026-11-10', '', '2026-11-08'),
+            ('ccx-v1:A+B+C+ccx@3', '2026-11-12', '2026-11-10', '2026-11-08'),
+            ('ccx-v1:A+B+C+ccx@4', 'invalid', '2026-11-10', '2026-11-08')
+          )
+          union all
+          select course_key, course_start, '2026-11-30', modified, dumped,
+            toUUID('22222222-2222-2222-2222-222222222222')
+          from values('course_key String, course_start String, modified String, dumped String',
+            ('ccx-v1:A+B+C+ccx@5','2026-11-10','2026-11-08T23:30:00-02:00','2026-11-09T02:00:00Z'),
+            ('ccx-v1:A+B+C+ccx@5','2026-11-06','2026-11-09T00:30:00Z','2026-11-10T02:00:00Z'),
+            ('ccx-v1:A+B+C+ccx@5','2026-11-07','bad','2026-11-01'),
+            ('ccx-v1:A+B+C+ccx@6','2026-11-10','2026-11-08','2026-11-08'),
+            ('ccx-v1:A+B+C+ccx@6','2026-11-06','bad','2026-11-09'),
+            ('ccx-v1:A+B+C+ccx@7','2026-11-10','2026-11-08','bad')
+          )
+    expect:
+      format: sql
+      rows: |
+        select *, multiIf(endsWith(ccx_id, '@5'), '2026-11-09T02:00:00Z', endsWith(ccx_id, '@7'), '', '2026-11-08') as overview_dumped_at
+        from values('ccx_id String, class_date_status String, class_start Nullable(Date), class_end Nullable(Date)',
+          ('ccx-v1:A+B+C+ccx@1', 'available', '2026-11-10', '2026-11-12'),
+          ('ccx-v1:A+B+C+ccx@2', 'missing_end', '2026-11-10', NULL),
+          ('ccx-v1:A+B+C+ccx@3', 'inverted_bounds', NULL, NULL),
+          ('ccx-v1:A+B+C+ccx@4', 'invalid_start', NULL, '2026-11-10'),
+          ('ccx-v1:A+B+C+ccx@5', 'available', '2026-11-10', '2026-11-30'),
+          ('ccx-v1:A+B+C+ccx@6', 'unorderable_overview', NULL, NULL),
+          ('ccx-v1:A+B+C+ccx@7', 'unorderable_overview', NULL, NULL)
+        )

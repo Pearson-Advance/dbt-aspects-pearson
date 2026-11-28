@@ -1,0 +1,35 @@
+version: 2
+models:
+  - name: int_pss_instructor_class_access
+    description: >-
+      Current authorized classes per authenticated LMS principal. The trusted dataset
+      must bind the identity issued for that authentication path. Match principal_user_id for
+      tokens that identify users by LMS user ID. Match the exact principal_username when the issuer
+      supplies an LMS username. A login of "10" can belong to a different
+      person from LMS user ID 10. Select the field from the trusted issuer and token path.
+      Require an explicit identity on embedded tokens. Superset substitutes guest_user when
+      the token omits the username. Semi-join the permitted (institution_id, ccx_id) pairs
+      before aggregation. Only the trusted reporting service needs SELECT on this projection,
+      which executes with the dbt deployment identity. Role changes are read at query time.
+      The authentication service must verify the account is active because the administrator
+      feed exports only assignment activity.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [principal_username, institution_id, ccx_id]
+    columns:
+      - name: principal_user_id
+        description: Stable LMS user primary key encoded as text.
+        data_tests: [not_null]
+      - name: principal_username
+        description: Exact Open edX username. The latest LMS profile must have one owner under case-insensitive comparison and match the assignment exactly.
+        data_tests: [not_null]
+      - name: institution_id
+        description: Verified institution primary key supplied by the class context.
+        data_tests: [not_null]
+      - name: ccx_id
+        description: Full CCX course key within the authorized institution.
+        data_tests: [not_null]
+      - name: has_instructor_grant
+        description: A current class assignment and active instructor affiliation cover this class.
+      - name: has_institution_admin_grant
+        description: An active administrator assignment covers this class through its institution.

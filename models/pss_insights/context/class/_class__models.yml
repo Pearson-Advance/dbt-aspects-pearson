@@ -1,0 +1,90 @@
+version: 2
+
+models:
+  - name: int_pss_ccx_overview_dates
+    description: >
+      Current CCX CourseOverview dates. For each exact CCX key, select one
+      complete row by LMS modification instant, sink dump instant and dump ID.
+      A row with malformed ordering timestamps makes bounds unavailable
+      until a valid source modification supersedes its last known instant.
+      An export with neither instant requires source repair.
+      Replaying the export preserves the row. A cleared bound stays cleared.
+      The LMS populates CourseOverview.start/end for a CCX from its course-level
+      start/due overrides. Use its exported values even when a master overview
+      exists. The dates use pss_reporting_timezone (UTC pending agreement).
+    columns:
+      - name: ccx_id
+        data_tests: [unique, not_null]
+      - name: class_date_status
+        description: Reason a calendar-date interval is unavailable, or available.
+      - name: overview_dumped_at
+        description: Sink timestamp of the selected CourseOverview export.
+
+  - name: int_pss_class_context
+    description: >
+      One row per nonempty CCX key on a current, application-undeleted
+      InstitutionCCX. Course Licensing current views remove sync tombstones.
+      The provisional population includes disabled, deleted and absent licenses.
+      This view reads the current source state at query time. Duplicate live
+      CCX mappings have one diagnostic row and no institution, license, class
+      record or master join key. Use the exact CCX key to join the activity inventory and class reporting.
+    columns:
+      - name: ccx_id
+        description: LMS CCX course key, shared across reporting contracts.
+        data_tests: [unique, not_null]
+      - name: institution_ccx_id
+        description: Source InstitutionCCX primary key for a unique live mapping.
+      - name: institution_id
+        description: Source institution foreign key for a unique live mapping.
+      - name: class_name
+        description: Class display name from the CCX licensing record.
+      - name: master_course
+        description: >
+          Course key from a well-formed CCX locator, checked against the
+          explicitly assigned master when present. NULL on conflict, malformed
+          locator or multiple source rows. No name-based mapping is used.
+      - name: assigned_master_course
+        description: Nullable unmodified master assignment from the class record.
+      - name: master_status
+        description: class_record, ccx_key, invalid_ccx_key, conflicting_master or duplicate_ccx.
+      - name: master_in_catalog
+        description: Whether the resolved master appears in current Course Licensing courses.
+      - name: license_id
+        description: Nullable license foreign key on the class.
+      - name: license_status
+        description: >
+          Current license status for a matching institution. A missing license
+          record with a known license ID uses the class copy. A conflicting
+          institution, missing current status or absent license ID yields NULL.
+      - name: class_license_status
+        description: License status carried on the class record at its last update.
+      - name: current_license_status
+        description: Status from the current license in the same institution.
+      - name: license_record_status
+        description: >
+          matched, status_mismatch, missing_current_status, conflicting_institution, missing_license,
+          no_license_id, or duplicate_ccx. A deleted business license has
+          status deleted and can still match the license record.
+      - name: institution_status
+        description: active, inactive, unknown or missing in the current institution source.
+      - name: source_row_count
+        description: Number of distinct current eligible InstitutionCCX source records for this key.
+      - name: class_scope_status
+        description: in_scope for a single candidate or duplicate_ccx for an ambiguous mapping.
+      - name: class_start
+        description: Nullable effective LMS CCX start date in the reporting timezone.
+      - name: is_active_today
+        description: >
+          Nullable active flag for the query date in pss_reporting_timezone.
+          Use pss_context_active_on(class_start, class_end, reporting_date)
+          with a selected reporting date to evaluate the same inclusive interval.
+      - name: class_end
+        description: Nullable effective LMS CCX end date, inclusive for the Active Classes metric.
+      - name: class_date_status
+        description: >
+          available, missing_ccx_overview, missing_start, missing_end,
+          invalid_start, invalid_end, unorderable_overview or inverted_bounds. Use a nullable
+          reporting_date BETWEEN class_start AND class_end only when available.
+          An inverted interval exposes two NULL dates.
+      - name: overview_dumped_at
+        description: Source dump time for the effective bounds, when an overview exists.
