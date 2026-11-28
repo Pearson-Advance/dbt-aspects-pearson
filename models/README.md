@@ -4,6 +4,7 @@ Keep Pearson-owned transformations separated by business domain:
 
 - `course_licensing/`: institutions, licenses, classes, enrollments, courses, and instructor assignments.
 - `measureup/`: MeasureUp test catalog, attempts, domains, subdomains, and question hierarchy.
+- [`pss_insights/context/`](pss_insights/context/README.md): PSS class population, learner rosters and principal-to-class access.
 - `shared/`: reusable intermediate models that are genuinely shared by more than one domain.
 
 ## Model contract

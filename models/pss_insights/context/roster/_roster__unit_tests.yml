@@ -1,0 +1,156 @@
+version: 2
+
+unit_tests:
+  - name: pss_roster_resolves_typed_xapi_and_preserves_conflicts
+    model: int_pss_roster_evidence
+    given:
+      - input: ref('int_pss_class_context')
+        format: sql
+        rows: |
+          select * from values(
+            'ccx_id String, institution_ccx_id Nullable(String), institution_id Nullable(String)',
+            ('A', '10', '1'), ('B', '20', '2'))
+      - input: source('event_sink', 'external_id')
+        format: sql
+        rows: |
+          select * from values(
+            'user_id Int32, external_id_type String, external_user_id UUID',
+            (1, 'xapi', '11111111-1111-4111-8111-111111111111'),
+            (1, 'xapi', '11111111-1111-4111-8111-111111111111'),
+            (1, 'lti', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'),
+            (2, 'xapi', '22222222-2222-4222-8222-222222222222'),
+            (3, 'xapi', '33333333-3333-4333-8333-333333333333'),
+            (99, 'xapi', '33333333-3333-4333-8333-333333333333'),
+            (4, 'xapi', '44444444-4444-4444-8444-444444444444'),
+            (4, 'xapi', '55555555-5555-4555-8555-555555555555'),
+            (5, 'lti', '66666666-6666-4666-8666-666666666666'))
+      - input: ref('int_course_licensing_enrollment_current')
+        format: sql
+        rows: |
+          select * from values(
+            'enrollment_key String, enrollment_source String, class_id String,
+             institution_ccx_id String, institution_id String, user_id Nullable(String),
+             enrollment_status String',
+            ('lic:1', 'licensed_enrollment', 'A', '10', '1', '1', 'Active'),
+            ('lic:1', 'licensed_enrollment', 'A', '10', '1', '1', 'Active'),
+            ('lic:2', 'licensed_enrollment', 'B', '20', '2', '1', 'Active'),
+            ('lic:3', 'licensed_enrollment', 'A', '10', '1', '2', 'Active'),
+            ('lic:4', 'licensed_enrollment', 'B', '20', '2', '3', 'Active'),
+            ('lic:5', 'licensed_enrollment', 'A', '10', '1', '4', 'Active'),
+            ('lic:6', 'licensed_enrollment', 'A', '10', '1', '5', 'Inactive'),
+            ('lic:7', 'licensed_enrollment', 'B', '20', '2', '1', 'Expired'),
+            ('lic:8', 'licensed_enrollment', 'A', '20', '2', '2', 'Active'),
+            ('lic:9', 'licensed_enrollment', 'A', '10', '1', NULL,'Active'),
+            ('invite:1', 'course_enrollment_allowed', 'B', '20', '2', NULL,'Pending'))
+    expect:
+      format: sql
+      rows: |
+        select * from values(
+          'ccx_id String, record_key String, lms_user_id Nullable(String),
+           source_enrollment_keys Array(String), enrollment_states Array(String),
+           enrollment_status String, identity_status String, actor_id Nullable(String),
+           is_registered Nullable(UInt8)',
+          ('A', 'user:1', '1', ['lic:1'], ['Active'], 'Active', 'resolved', '11111111-1111-4111-8111-111111111111', 1),
+          ('A', 'user:2', '2', ['lic:3'], ['Active'], 'Active', 'resolved', '22222222-2222-4222-8222-222222222222', 1),
+          ('B', 'user:1', '1', ['lic:2', 'lic:7'], ['Active', 'Expired'], 'Conflicting', 'resolved', '11111111-1111-4111-8111-111111111111', NULL),
+          ('B', 'user:3', '3', ['lic:4'], ['Active'], 'Active', 'shared_xapi_uuid', NULL,1),
+          ('A', 'user:4', '4', ['lic:5'], ['Active'], 'Active', 'multiple_xapi_uuids', NULL,1),
+          ('A', 'user:5', '5', ['lic:6'], ['Inactive'], 'Inactive', 'no_xapi_uuid', NULL,NULL),
+          ('A', 'lic:8', NULL,['lic:8'], ['Active'], 'Active', 'class_key_mismatch', NULL,NULL),
+          ('B', 'lic:8', NULL,['lic:8'], ['Active'], 'Active', 'class_key_mismatch', NULL,NULL),
+          ('A', 'lic:9', NULL,['lic:9'], ['Active'], 'Active', 'missing_lms_user', NULL,1),
+          ('B', 'invite:1', NULL,['invite:1'], ['Pending'], 'Pending', 'invitation', NULL,0))
+
+  - name: pss_roster_shared_learner_and_learner_without_activity
+    model: int_pss_learner_class_context
+    given:
+      - input: ref('int_pss_roster_evidence')
+        format: sql
+        rows: |
+          select * from values(
+            'ccx_id String, actor_id Nullable(String), identity_status String,
+             is_registered Nullable(UInt8), enrollment_status String,
+             enrollment_states Array(String), source_enrollment_keys Array(String)',
+            ('A', 'x1', 'resolved', 1, 'Active', ['Active'], ['l1', 'l2']),
+            ('A', 'x2', 'resolved', 1, 'Active', ['Active'], ['l3']),
+            ('B', 'x1', 'resolved', 1, 'Active', ['Active'], ['l4']),
+            ('A', NULL,'invitation', 0, 'Pending', ['Pending'], ['p1']),
+            ('A', NULL,'no_xapi_uuid', 1, 'Active', ['Active'], ['l5']))
+    expect:
+      format: sql
+      rows: |
+        select * from values(
+          'ccx_id String, actor_id String, is_registered Nullable(UInt8),
+           enrollment_status String, enrollment_states Array(String),
+           source_enrollment_count UInt64',
+          ('A', 'x1', 1, 'Active', ['Active'], 2),
+          ('A', 'x2', 1, 'Active', ['Active'], 1),
+          ('B', 'x1', 1, 'Active', ['Active'], 1))
+
+  - name: pss_reconciled_empty_pending_incomplete_and_ambiguous_rosters
+    model: int_pss_roster_coverage
+    overrides:
+      vars: {pss_roster_reconciled_until_utc: '2099-12-31 23:59:59'}
+    given:
+      - input: ref('int_pss_class_context')
+        format: sql
+        rows: |
+          select * from values(
+            'ccx_id String, institution_ccx_id Nullable(String), institution_id Nullable(String)',
+            ('A', '10', '1'), ('B', '20', '1'), ('C', '30', '1'), ('D', '40', '1'), ('E', NULL,NULL), ('F', '60', '2'))
+      - input: ref('int_pss_roster_evidence')
+        format: sql
+        rows: |
+          select * from values(
+            'ccx_id String, lms_user_id Nullable(String), identity_status String,
+             is_registered Nullable(UInt8), enrollment_states Array(String)',
+            ('B', NULL,'invitation', 0,['Pending']),
+            ('C', '1', 'resolved', 1,['Active']),
+            ('C', '2', 'no_xapi_uuid', 1,['Active']),
+            ('D', '1', 'resolved', NULL,['Active', 'Expired']),
+            ('F', '1', 'resolved', 1,['Active']))
+    expect:
+      format: sql
+      rows: |
+        select * from values(
+          'ccx_id String, registered_source_learners UInt64,
+           resolved_registered_learners UInt64, unresolved_registered_learners UInt64,
+           pending_invitations UInt64, missing_user_records UInt64,
+           scope_mismatch_records UInt64, registration_policy_pending UInt64,
+           licensed_source_learners UInt64, learners_with_active_state UInt64,
+           learners_with_inactive_state UInt64, learners_with_expired_state UInt64,
+           roster_status String, source_reconciled UInt8,
+           registered_actor_denominator Nullable(UInt64)',
+          ('A', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 'empty', 1, 0),
+          ('B', 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 'pending_only', 1, 0),
+          ('C', 2, 1, 1, 0, 0, 0, 0, 2, 2, 0, 0, 'identity_incomplete', 1, NULL),
+          ('D', 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 1, 'registration_policy_pending', 1, NULL),
+          ('E', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 'class_scope_unavailable', 1, NULL),
+          ('F', 1, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 'resolved', 1, 1))
+
+  - name: pss_unreconciled_extract_has_no_registered_denominator
+    model: int_pss_roster_coverage
+    overrides:
+      vars: {pss_roster_reconciled_until_utc: '2000-01-01 00:00:00'}
+    given:
+      - input: ref('int_pss_class_context')
+        format: sql
+        rows: "select 'A' as ccx_id, '10' as institution_ccx_id, '1' as institution_id"
+      - input: ref('int_pss_roster_evidence')
+        format: sql
+        rows: |
+          select 'A' as ccx_id, '1' as lms_user_id, 'resolved' as identity_status,
+                 toUInt8(1) as is_registered, ['Active'] as enrollment_states where 0
+    expect:
+      format: sql
+      rows: |
+        select * from values(
+          'ccx_id String, registered_source_learners UInt64,
+           resolved_registered_learners UInt64, unresolved_registered_learners UInt64,
+           pending_invitations UInt64, missing_user_records UInt64,
+           scope_mismatch_records UInt64, registration_policy_pending UInt64,
+           licensed_source_learners UInt64, learners_with_active_state UInt64,
+           learners_with_inactive_state UInt64, learners_with_expired_state UInt64,
+           roster_status String, source_reconciled UInt8,
+           registered_actor_denominator Nullable(UInt64)',
+          ('A', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 'empty', 0, NULL))

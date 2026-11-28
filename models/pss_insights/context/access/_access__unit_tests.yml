@@ -1,0 +1,105 @@
+unit_tests:
+  - name: test_pss_access_grants_follow_identity_role_and_institution
+    description: >-
+      Two coaches teach A. One also administers I but gains no instructor rights
+      on A2 from that role. The other administrator has the numeric LMS username
+      "10" and can see only B. A portal token for user ID 10 belongs to the first
+      coach and can see only A. Reject inactive affiliations, unrelated or stale
+      assignments and missing, case-colliding, reused or tied logins.
+    model: int_pss_instructor_class_access
+    given:
+      - &classes
+        input: ref('int_pss_class_context')
+        format: sql
+        rows: |
+          select * from values(
+            'ccx_id String, institution_ccx_id String, institution_id String, class_scope_status String, institution_status String, master_status String',
+            ('A', '101', 'I', 'in_scope', 'active', 'class_record'),
+            ('A2', '102', 'I', 'in_scope', 'active', 'class_record'),
+            ('B', '201', 'J', 'in_scope', 'active', 'class_record'),
+            ('C', '301', 'K', 'in_scope', 'inactive', 'ccx_key'),
+            ('D', '401', 'I', 'duplicate_ccx', 'active', 'duplicate_ccx'),
+            ('bad', '501', 'I', 'in_scope', 'active', 'invalid_ccx_key'))
+      - &instructors
+        input: ref('int_course_licensing_instructor_current')
+        format: sql
+        rows: |
+          select * from values('source_id String, user_id String, username String, user_is_active String',
+            ('1', '10', 'First', 'True'), ('2', '20', 'second', 'True'),
+            ('3', '30', 'inactive_affiliation', 'True'), ('4', '40', 'wrong_institution', 'True'),
+            ('5', '50', 'inactive_user', 'False'))
+      - &affiliations
+        input: ref('int_course_licensing_instructor_institution_current')
+        format: sql
+        rows: |
+          select * from values('instructor_id String, user_id String, institution_id String, active String',
+            ('1', '10', 'I', 'True'), ('2', '20', 'I', 'True'), ('3', '30', 'I', 'False'),
+            ('4', '40', 'J', 'True'), ('5', '50', 'I', 'True'))
+      - input: ref('int_course_licensing_instructor_class_current')
+        format: sql
+        rows: |
+          select * from values(
+            'instructor_id String, user_id String, institution_ccx_id String, institution_id String, class_id String',
+            ('1', '10', '101', 'I', 'A'), ('2', '20', '101', 'I', 'A'), ('2', '20', '101', 'I', 'A'),
+            ('3', '30', '101', 'I', 'A'), ('4', '40', '101', 'I', 'A'), ('5', '50', '101', 'I', 'A'),
+            ('2', '20', '101', 'I', 'A2'), ('2', '20', '201', 'I', 'B'))
+      - &administrators
+        input: ref('int_course_licensing_institution_administrator_current')
+        format: sql
+        rows: |
+          select * from values('user_id String, user_name String, institution_id String, active String',
+            ('20', 'second', 'I', 'True'), ('60', '10', 'J', 'True'),
+            ('60', '10', 'K', 'True'), ('60', '10', 'I', 'False'),
+            ('70', 'collision', 'I', 'True'), ('71', 'tie', 'I', 'True'),
+            ('72', 'old_name', 'I', 'True'), ('99', 'unknown', 'I', 'True'),
+            ('85', 'bad_time', 'I', 'True'), ('86', 'undated_collision', 'I', 'True'),
+            ('87', 'otherwise_latest', 'I', 'True'), ('-2', 'invalid_identifier', 'I', 'True'),
+            ('90', 'Coach', 'I', 'True'), ('91', 'coach', 'I', 'True'), ('20', 'SECOND', 'J', 'True'))
+      - &profiles
+        input: source('event_sink', 'user_profile')
+        format: sql
+        rows: |
+          select * from values('user_id Int32, username String, time_last_dumped String',
+            (10, 'First', '2026-11-01'), (20, 'second', '2026-11-01'), (20, 'second', '2026-11-01'),
+            (30, 'inactive_affiliation', '2026-11-01'), (40, 'wrong_institution', '2026-11-01'),
+            (50, 'inactive_user', '2026-11-01'), (60, '10', '2026-11-01'),
+            (70, 'collision', '2026-11-01'), (80, 'collision', '2026-11-01'),
+            (71, 'tie', '2026-11-01'), (71, 'another_name', '2026-11-01'),
+            (72, 'old_name', '2026-10-01'), (72, 'new_name', '2026-11-01'),
+            (81, 'old_name', '2026-11-01'),
+            (85, 'bad_time', '2026-11-01'), (85, 'bad_time', 'bad date'),
+            (86, 'undated_collision', '2026-11-01'), (87, 'otherwise_latest', '2026-11-01'),
+            (88, 'otherwise_latest', '2026-11-01'), (88, 'undated_collision', 'bad date'),
+            (-2, 'invalid_identifier', '2026-11-01'),
+            (90, 'Coach', '2026-11-01'), (91, 'coach', '2026-11-01'))
+    expect:
+      format: sql
+      rows: |
+        select * from values(
+          'principal_user_id String, principal_username String, institution_id String, ccx_id String, has_instructor_grant UInt8, has_institution_admin_grant UInt8',
+          ('10', 'First', 'I', 'A', 1, 0), ('20', 'second', 'I', 'A', 1, 1),
+          ('20', 'second', 'I', 'A2', 0, 1), ('60', '10', 'J', 'B', 0, 1))
+
+  - name: test_pss_access_after_last_class_assignment_is_revoked
+    description: >-
+      Replay the same authenticated users and institutions after the first coach's
+      last class link disappears from the current assignment relation. The second
+      coach retains A, and the two administrators retain only their institutions.
+    model: int_pss_instructor_class_access
+    given:
+      - *classes
+      - *instructors
+      - *affiliations
+      - input: ref('int_course_licensing_instructor_class_current')
+        format: sql
+        rows: |
+          select '2' as instructor_id, '20' as user_id, '101' as institution_ccx_id, 'I' as institution_id, 'A' as class_id
+      - *administrators
+      - *profiles
+    expect:
+      format: sql
+      rows: |
+        select * from values(
+          'principal_user_id String, principal_username String, institution_id String, ccx_id String, has_instructor_grant UInt8, has_institution_admin_grant UInt8',
+          ('20', 'second', 'I', 'A', 1, 1), ('20', 'second', 'I', 'A2', 0, 1),
+          ('60', '10', 'J', 'B', 0, 1))
