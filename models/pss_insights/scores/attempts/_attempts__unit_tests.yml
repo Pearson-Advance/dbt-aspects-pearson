@@ -1,0 +1,53 @@
+unit_tests:
+  - name: test_pss_lti_parent_is_stable_across_actual_dumps
+    model: int_pss_lti_subsection_links
+    given:
+      - input: ref('int_pss_master_course_scope')
+        format: sql
+        rows: |
+          select 'course-v1:O+C+R' as master_course
+      - input: source('event_sink', 'course_blocks')
+        format: sql
+        rows: |
+          select 'course-v1:O+C+R' as course_key, dump_id,
+            if(dump_id=1,'2026-06-01 00:00:00','2026-07-01 00:00:00') as time_last_dumped,
+            concat('block-v1:O+C+R+type@', kind, '+block@', block) as location,
+            concat('{"section":1,"subsection":', toString(position), '}') as xblock_data_json
+          from values('dump_id UInt8, kind String, block String, position UInt8',
+            (1,'sequential','quiz',1),(1,'sequential','lab',2),
+            (1,'lti_consumer','stable',1),(1,'lti','moved',1),(1,'lti','missing',3),
+            (2,'sequential','lab',1),(2,'sequential','quiz',2),
+            (2,'lti_consumer','stable',2),(2,'lti','moved',1))
+    expect:
+      format: sql
+      rows: |
+          select 'course-v1:O+C+R' as master_course,
+            concat('block-v1:O+C+R+type@', kind, '+block@', block) as master_block_id,
+            if(block='stable',toNullable('block-v1:O+C+R+type@sequential+block@quiz'),NULL) as subsection_block_id,
+            parent_status, if(block='stable',toDateTime64('2026-06-01 00:00:00',6,'UTC'),null) as first_parent_observed_at
+          from values('kind String, block String, parent_status String',
+            ('lti_consumer','stable','linked'),('lti','moved','ambiguous_lti_parent'),('lti','missing','missing_lti_parent'))
+  - name: test_pss_measureup_eligibility_rules_reject_ambiguity
+    model: int_pss_measureup_attempt_rules
+    given:
+      - input: ref('pss_measureup_attempt_rules')
+        format: sql
+        rows: |
+          select 'M' as master_course, * from values(
+            'activity_type String, flow_state String, mode String, is_participation UInt8, is_eligible_practice UInt8, is_qualifying_final UInt8',
+            ('Final Exam','finished','Certification',1,0,1),
+            ('Final Exam','started','certification',1,0,1),
+            ('Final Exam','finished','practice',1,0,0),
+            ('Final Exam','finished',' Practice ',1,0,0),
+            ('Quiz','finished','practice',1,1,0),
+            ('Practice Exam','finished','Practice',1,1,0))
+    expect:
+      format: sql
+      rows: |
+          select 'M' as master_course, * from values(
+            'activity_type String, required_state String, required_mode String, participation UInt8, practice UInt8, final UInt8, valid_rule UInt8',
+            ('Final Exam','finished','certification',1,0,1,1),
+            ('Final Exam','started','certification',1,0,1,1),
+            ('Final Exam','finished','practice',1,0,0,0),
+            ('Quiz','finished','practice',1,1,0,0),
+            ('Practice Exam','finished','practice',1,1,0,1))

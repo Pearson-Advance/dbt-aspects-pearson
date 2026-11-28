@@ -1,0 +1,28 @@
+version: 2
+seeds:
+  - name: pss_measureup_attempt_rules
+    description: Approved, exact per-master rules for each classified activity, source flow state and mode. Normalize state and mode to lowercase. Missing rules leave eligibility unknown.
+    config:
+      tags: [pss_scores]
+      column_types:
+        master_course: String
+        activity_type: String
+        flow_state: String
+        mode: String
+        is_participation: UInt8
+        is_eligible_practice: UInt8
+        is_qualifying_final: UInt8
+
+  - name: pss_measureup_score_units
+    description: >
+      Source owners confirm the final-score scale (fraction or percent) per master. A blank unit leaves the score scale unconfirmed while allowing independent version review.
+      Accept version pairing only if the provider guarantees that the response-level
+      test identifies the returned attempt's version for the entire course run,
+      including historical replays. Otherwise retain the original mark as catalog
+      evidence and leave the applicable attempt threshold NULL.
+    config:
+      tags: [pss_scores]
+      column_types:
+        master_course: String
+        score_unit: String
+        accept_version_pairing: UInt8

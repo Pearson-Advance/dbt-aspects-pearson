@@ -1,0 +1,39 @@
+unit_tests:
+  - name: test_pss_attempt_coverage_requires_continuous_reconciled_evidence
+    model: int_pss_activity_attempt_coverage
+    given:
+      - input: ref('pss_attempt_coverage_evidence')
+        format: sql
+        rows: |
+          select ccx_id,'sub' as subsection_block_id, snapshot_id,
+            concat('2025-11-02 ',start_hm,':00') as coverage_start,
+            concat('2025-11-02 ',end_hm,':00') as coverage_end,
+            '2025-11-03 00:00:00' as verified_at, evidence_ref
+          from values('ccx_id String, snapshot_id String, start_hm String, end_hm String, evidence_ref String',
+            ('A','v','10:00','10:30','audit'),('A','v','10:30','11:00','audit'),
+            ('A','v','10:15','10:20','audit'),('A','v','12:00','13:00','audit'),
+            ('A','old','11:00','12:00','audit'),('A','v','11:00','12:00',''),
+            ('A','v','15:00','14:00','audit'),('B','v','10:00','11:00','audit'),
+            ('C','v','10:00','11:00','audit'),('D','v','10:00','11:00','audit'))
+      - input: ref('int_pss_activity_catalog')
+        format: sql
+        rows: |
+          select 'inst' as institution_id, ccx_id,'sub' as subsection_block_id,'v' as snapshot_id,active as in_latest_publish
+          from values('ccx_id String,active UInt8',('A',1),('B',1),('C',1),('D',0))
+      - input: ref('int_pss_roster_coverage')
+        format: sql
+        rows: |
+          select * from values('ccx_id String, registered_actor_denominator Nullable(UInt64)',
+            ('A',1),('B',null),('C',1),('D',1))
+      - input: ref('int_pss_class_inventory_coverage')
+        format: sql
+        rows: |
+          select ccx_id,if(ccx_id='C','partially_classified','classified') as inventory_status
+          from values('ccx_id String','A','B','C','D')
+    expect:
+      format: sql
+      rows: |
+        select 'inst' as institution_id,'A' as ccx_id,'sub' as subsection_block_id,'v' as snapshot_id,
+          toDateTime64(concat('2025-11-02 ',start_hm,':00'),6,'UTC') as coverage_start,
+          toDateTime64(concat('2025-11-02 ',end_hm,':00'),6,'UTC') as coverage_end
+        from values('start_hm String,end_hm String',('10:00','11:00'),('12:00','13:00'))

@@ -1,0 +1,113 @@
+version: 2
+
+models:
+  - name: int_pss_activity_type_history
+    description: >-
+      One applicable, recognized class subsection per observed Studio revision.
+      UTC intervals include valid_from and exclude valid_until. Every later revision
+      ends the predecessor, including a conflict, unmapped type or removed subsection.
+      A NULL end requires the current master publication to be observed. Missing
+      earlier snapshots, unrecorded Studio publishes or historic changes to reviewed
+      mapping and inheritance configuration require source reconciliation.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [ccx_id, subsection_block_id, valid_from]
+
+  - name: int_pss_measureup_attempt_attribution
+    description: >-
+      Restricted linkage and as-of evidence per provider attempt. A positively
+      observed class activity at the attempt start can resolve a formerly graded
+      subsection even if it no longer appears in the current catalog. Other
+      identity, role, launch, and block gaps remain unresolved.
+
+  - name: int_pss_lti_dump_membership
+    description: >-
+      LTI block keys observed together in each master course dump. A later dump can
+      have zero LTI blocks. A tied or unorderable dump cannot certify dated linkage.
+      A source failure emitting no course-block rows at all cannot be detected here.
+
+unit_tests:
+  - name: pss_activity_type_history_expires_on_every_publication
+    model: int_pss_activity_type_history
+    given:
+      - input: ref('int_pss_assignment_publications')
+        format: sql
+        rows: |
+          select 'M' as master_course,id as snapshot_id, status as snapshot_status,t as published_time,last as is_latest
+          from values('id String, status String,t Nullable(DateTime64(6)),last UInt8',
+            ('one','observed','2026-01-01 00:00:00',0),('','conflicting_publication','2026-01-02 00:00:00',0),
+            ('two','observed','2026-01-03 00:00:00',0),('empty','observed','2026-01-04 00:00:00',1))
+      - input: ref('int_pss_subsection_assignments')
+        format: sql
+        rows: |
+          select 'M' as master_course,id as snapshot_id,'section' as subsection_block_id,true as graded, activity_type
+          from values('id String,activity_type Nullable(String)',('one','Quiz'),('two','Final Exam'))
+      - input: ref('int_pss_class_publication_applicability')
+        format: sql
+        rows: |
+          select 'M' as master_course,ccx_id,id as snapshot_id,rule as scope_rule,allowed as allowed_subsections
+          from values('ccx_id String,id String,rule String,allowed Array(String)',
+            ('A','one','inherit_master',[]),('A','two','include_subsection',['section']),
+            ('B','one','inherit_master',[]),('B','two','empty',[]))
+      - input: ref('int_pss_master_publication')
+        format: sql
+        rows: select 'M' as master_course,'observed' as publication_status
+    expect:
+      format: sql
+      rows: |
+        select ccx_id,'M' as master_course,'section' as subsection_block_id,id as snapshot_id,
+          start as valid_from,stop as valid_until,activity_type
+        from values('ccx_id String,id String,start DateTime64(6),stop Nullable(DateTime64(6)),activity_type String',
+          ('A','one','2026-01-01 00:00:00','2026-01-02 00:00:00','Quiz'),
+          ('B','one','2026-01-01 00:00:00','2026-01-02 00:00:00','Quiz'),
+          ('A','two','2026-01-03 00:00:00','2026-01-04 00:00:00','Final Exam'))
+
+  - name: pss_attempts_use_the_class_activity_type_effective_at_start
+    model: int_pss_measureup_attempt_attribution
+    given:
+      - input: ref('int_pss_measureup_attempt_evidence')
+        format: sql
+        rows: |
+          select id,'A' as ccx_id, 's' as subsection_block_id,'M' as master_course,'lti' as master_block_id, raw_start,
+                 multiIf(id='no_link_clock',null,id='early_link',toDateTime64('2026-02-01',6,'UTC'),toDateTime64('2025-01-01',6,'UTC')) as first_parent_observed_at,
+                 if(id in ('former','unseen'),null,'Final Exam') as activity_type,
+                 multiIf(id in ('former','unseen'),'activity_not_in_catalog',id='bad_actor','missing_class_registration','linked') as link_status
+          from values('id String,raw_start Nullable(String)',
+              ('before','2025-12-31'),('quiz','2026-01-01'),('gap','2026-01-02'),('final','2026-01-03'),('undated',NULL),
+              ('former','2026-01-01'),('unseen','2025-12-31'),('bad_actor','2026-01-01'),('early_link','2026-01-03'),('no_link_clock','2026-01-03'),
+              ('removed_link','2026-01-04'),('readded_link','2026-01-05'))
+      - input: ref('int_pss_lti_dump_membership')
+        format: sql
+        rows: |
+          select 'M' as master_course, observed_at_utc,true as dump_order_known, lti_blocks
+          from values('observed_at_utc DateTime64(6),lti_blocks Array(String)',
+            ('2025-01-01',['lti']),('2026-01-04',[]),('2026-01-05',['lti']))
+      - input: ref('int_pss_activity_type_history')
+        format: sql
+        rows: |
+          select 'A' as ccx_id,'s' as subsection_block_id, snapshot_id,valid_from,valid_until,activity_type
+          from values('snapshot_id String,valid_from DateTime64(6),valid_until Nullable(DateTime64(6)),activity_type String',
+              ('quiz-rev','2026-01-01','2026-01-02','Quiz'),('final-rev','2026-01-03',NULL,'Final Exam'))
+    expect:
+      format: sql
+      rows: |
+        select id,'A' as ccx_id,'s' as subsection_block_id,'M' as master_course,'lti' as master_block_id,raw_start,
+          multiIf(id='no_link_clock',null,id='early_link',toDateTime64('2026-02-01',6,'UTC'),toDateTime64('2025-01-01',6,'UTC')) as first_parent_observed_at,
+          if(id in ('former','unseen'),null,'Final Exam') as activity_type,
+          multiIf(id in ('former','unseen'),'activity_not_in_catalog',id='bad_actor','missing_class_registration','linked') as link_status,
+          parseDateTime64BestEffortOrNull(raw_start,6,'UTC') as attempted_at,
+          classification_status,type_at_start,snapshot_at_start,
+          multiIf(id='bad_actor','missing_class_registration',id='unseen','activity_not_in_catalog',id in ('early_link','no_link_clock','removed_link'),classification_status,'linked') as resolved_link_status
+        from values('id String,raw_start Nullable(String),classification_status String,type_at_start Nullable(String),snapshot_at_start Nullable(String)',
+          ('before','2025-12-31','activity_type_at_start_unavailable',NULL,NULL),
+          ('quiz','2026-01-01','classified','Quiz','quiz-rev'),
+          ('gap','2026-01-02','activity_type_at_start_unavailable',NULL,NULL),
+          ('final','2026-01-03','classified','Final Exam','final-rev'),
+          ('undated',NULL,'start_time_unavailable',NULL,NULL),
+          ('former','2026-01-01','classified','Quiz','quiz-rev'),
+          ('unseen','2025-12-31','activity_type_at_start_unavailable',NULL,NULL),
+          ('bad_actor','2026-01-01','unresolved_attempt',NULL,NULL),
+          ('early_link','2026-01-03','attempt_before_observed_lti_parent',NULL,NULL),
+          ('no_link_clock','2026-01-03','lti_parent_time_unavailable',NULL,NULL),
+          ('removed_link','2026-01-04','lti_block_unverified_at_start',NULL,NULL),
+          ('readded_link','2026-01-05','classified','Final Exam','final-rev'))

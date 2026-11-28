@@ -1,0 +1,146 @@
+version: 2
+unit_tests:
+  - name: pss_native_scores_require_explicit_consistent_subsection_points
+    model: int_pss_native_subsection_grades
+    given:
+      - input: ref('xapi_events_all_parsed')
+        format: sql
+        rows: |
+          select id as event_id, class as course_key, learner as actor_id,
+              'http://id.tincanapi.com/verb/earned' as verb_id,
+              concat('https://lms/xblock/', key) as object_id, toDateTime64('2026-11-01 12:00:00',6,'UTC') + toIntervalHour(copy) as emission_time,
+              concat('{',multiIf(id='1','"timestamp":"2026-11-01T11:00:00Z",',id='11','"timestamp":"2025-01-01T08:00:00Z",',id='12','"timestamp":"2026-11-01T09:00:00Z",',''),'"result":{"score":',score,'}}') as event
+          from values('id String, class String, learner String, key String, score String',
+              ('1','A','L','m+type@sequential+block@1','{"raw":1,"max":10,"scaled":0.1}'),
+              ('2','A','L','a+type@sequential+block@1','{"raw":0,"max":8,"scaled":0}'),
+              ('3','A','L','a+type@sequential+block@1','{"max":8}'),
+              ('4','A','L','a+type@sequential+block@1','{"raw":0,"max":0,"scaled":0}'),
+              ('5','A','L','a+type@sequential+block@1','{"raw":1,"max":10,"scaled":1}'),
+              ('6','A','pending','a+type@sequential+block@1','{"raw":1,"max":2,"scaled":0.5}'),
+              ('7','B','L','a+type@sequential+block@1','{"raw":1,"max":2,"scaled":0.5}'),
+              ('8','A','L','m+type@problem+block@1','{"raw":0,"max":8,"scaled":0}'),
+              ('9','outside','L','a+type@sequential+block@1','{"raw":0,"max":8,"scaled":0}'),
+              ('10','A','L','m+type@sequential+block@1','{"raw":1,"max":2,"scaled":0.5}'),
+              ('10','A','conflicting','m+type@sequential+block@1','{"raw":1,"max":2,"scaled":0.5}'),
+              ('11','A','L','m+type@sequential+block@1','{"raw":1,"max":2,"scaled":0.5}'),
+              ('12','A','L','m+type@sequential+block@1','{"raw":1,"max":2,"scaled":0.5}'))
+          array join if(id='1',[0,24],[0]) as copy
+      - input: ref('int_pss_class_scope')
+        format: sql
+        rows: select * from values('ccx_id String',('A'),('B'))
+      - input: ref('int_pss_activity_catalog')
+        format: sql
+        rows: |
+          select ccx_id, 'm+type@sequential+block@1' as subsection_block_id,
+                 concat(lower(ccx_id),'+type@sequential+block@1') as ccx_subsection_block_id,
+                 'Quiz' as activity_type, true as in_latest_publish from values('ccx_id String',('A'),('B'))
+      - input: ref('int_pss_activity_type_history')
+        format: sql
+        rows: |
+          select 'A' as ccx_id,'m+type@sequential+block@1' as subsection_block_id,
+             'p' as snapshot_id,activity_type,valid_from,valid_until
+          from values('activity_type String, valid_from DateTime64(6), valid_until Nullable(DateTime64(6))',
+             ('Lab','2026-01-01 00:00:00','2026-11-01 10:00:00'),('Quiz','2026-11-01 10:00:00',NULL))
+      - input: ref('int_pss_learner_class_context')
+        format: sql
+        rows: select * from values('ccx_id String, actor_id String, is_registered UInt8',('A','L',1),('B','L',1),('A','pending',0))
+    expect:
+      format: sql
+      rows: |
+        select if(event_id='7','B','A') as ccx_id, actor_id, if(event_id in ('7','10'),null,'m+type@sequential+block@1') as subsection_block_id,
+           event_id, coalesce(statement_at,first_emission_at) as graded_at,
+           parseDateTime64BestEffortOrNull(multiIf(event_id='1','2026-11-01T11:00:00Z',event_id='11','2025-01-01T08:00:00Z',event_id='12','2026-11-01T09:00:00Z',''),6,'UTC') as statement_at,
+           toDateTime64('2026-11-01 12:00:00',6,'UTC') as first_emission_at,
+           earned_points, possible_points, scaled_score, linkage_status, score_status, score_pct
+        from values('event_id String, actor_id Nullable(String), earned_points Nullable(Float64), possible_points Nullable(Float64), scaled_score Nullable(Float64), linkage_status String, score_status String, score_pct Nullable(Float64)',
+          ('1','L',1,10,0.1,'resolved','observed',10),('2','L',0,8,0,'resolved','observed',0),('3','L',NULL,8,NULL,'resolved','missing_grade_field',NULL),
+          ('4','L',0,0,0,'resolved','invalid_lms_score',NULL),('5','L',1,10,1,'resolved','inconsistent_lms_score',NULL),
+          ('6',NULL,1,2,0.5,'unregistered_or_unresolved_actor','observed',50),('7','L',1,2,0.5,'unmapped_subsection','observed',50),
+          ('10',NULL,NULL,NULL,NULL,'conflicting_statement','conflicting_statement',NULL),
+          ('11','L',1,2,0.5,'activity_type_at_grade_unavailable','observed',50),
+          ('12','L',1,2,0.5,'activity_type_changed','observed',50))
+
+  - name: pss_current_score_selection_preserves_unknowns_and_approved_source
+    model: rpt_pss_activity_scores_current
+    overrides:
+      vars:
+        pss_current_score_rules:
+          course-v1:O+C+R:
+            Lab: lms_subsection
+            Final Exam: measureup_latest_finished
+    given:
+      - input: ref('int_pss_activity_catalog')
+        format: sql
+        rows: |
+          select 'A' as ccx_id,'inst' as institution_id,'course-v1:O+C+R' as master_course,
+            activity_type,subsection_block_id,subsection_block_id != 'removed' as in_latest_publish
+          from values('subsection_block_id String, activity_type String', ('agree','Quiz'),('disagree','Quiz'),
+            ('invalid','Quiz'),('zero','Quiz'),('lab','Lab'),('absent','Lab'),('latest','Final Exam'),
+            ('tied','Final Exam'),('native_tie','Quiz'),('removed','Quiz'),('unfinished','Quiz'))
+      - input: ref('int_pss_activity_score_candidates')
+        format: sql
+        rows: |
+          select 'A' as ccx_id,'L' as actor_id, subsection_block_id,provider,source_id,
+                 toDateTime64('2026-11-01 12:00:00', 6, 'UTC') + toIntervalSecond(seconds) as observed_at,
+                 is_finished,score_pct,score_status from values(
+              'subsection_block_id String,provider String,source_id String,seconds UInt8,is_finished UInt8,score_pct Nullable(Float64),score_status String',
+              ('agree','native','a',1,1,10,'observed'),('agree','measureup','b',2,1,10,'observed'),
+              ('disagree','measureup','a',1,1,60,'observed'),('disagree','measureup','b',2,1,80,'observed'),
+              ('invalid','native','a',1,1,NULL,'missing_grade_field'),('zero','native','a',1,1,0,'observed'),
+              ('lab','native','a',1,1,10,'observed'),('lab','measureup','b',2,1,80,'observed'),
+              ('absent','measureup','x',1,1,16,'observed'),('removed','native','a',1,1,90,'observed'),
+              ('latest','measureup','1',1,1,60,'observed'),('latest','measureup','2',2,1,80,'observed'),
+              ('latest','measureup','3',3,0,NULL,'unfinished_attempt'),
+              ('tied','measureup','1',2,1,60,'observed'),('tied','measureup','2',2,1,80,'observed'),
+              ('native_tie','native','1',2,1,60,'observed'),('native_tie','native','2',2,1,80,'observed'),
+              ('unfinished','measureup','x',1,0,NULL,'unfinished_attempt'))
+    expect:
+      format: sql
+      rows: |
+        select 'A' as ccx_id, 'L' as actor_id, subsection_block_id, 'inst' as institution_id,
+            'course-v1:O+C+R' as master_course, activity_type,
+            multiIf(activity_type='Lab','lms_subsection',activity_type='Final Exam','measureup_latest_finished','agreement') as selection_rule,
+            score_status,score_pct,score_source,
+            toDateTime64('2026-11-01 12:00:00',6,'UTC') + toIntervalSecond(seconds) as score_observed_at,
+            selected_source_ids,native_grade_count,provider_attempt_count,
+            if(score_status in ('missing_grade_field','unfinished_attempt'),[score_status],[]) as evidence_gaps
+        from values('subsection_block_id String, activity_type String, score_status String, score_source Nullable(String), score_pct Nullable(Float64), seconds Nullable(UInt8), selected_source_ids Array(Tuple(String,String)), native_grade_count UInt64, provider_attempt_count UInt64',
+            ('agree','Quiz','observed','measureup+native',10,2,[('measureup','b'),('native','a')],1,1),
+            ('disagree','Quiz','score_rule_required',NULL,NULL,2,[('measureup','a'),('measureup','b')],0,2),
+            ('invalid','Quiz','missing_grade_field',NULL,NULL,1,[('native','a')],1,0),
+            ('zero','Quiz','observed','native',0,1,[('native','a')],1,0),
+            ('lab','Lab','observed','native',10,1,[('native','a')],1,1),
+            ('absent','Lab','configured_source_unavailable',NULL,NULL,NULL,[],0,1),
+            ('latest','Final Exam','observed','measureup',80,2,[('measureup','2')],0,3),
+            ('tied','Final Exam','conflicting_latest_scores',NULL,NULL,2,[('measureup','1'),('measureup','2')],0,2),
+            ('native_tie','Quiz','conflicting_latest_scores',NULL,NULL,2,[('native','1'),('native','2')],2,0),
+            ('unfinished','Quiz','unfinished_attempt',NULL,NULL,1,[('measureup','x')],0,1))
+
+  - name: pss_score_candidates_keep_latest_lms_ties_and_provider_identity
+    model: int_pss_activity_score_candidates
+    given:
+      - input: ref('int_pss_native_subsection_grades')
+        format: sql
+        rows: |
+          select 'A' as ccx_id, 'L' as actor_id, 'section' as subsection_block_id, event_id,
+              toDateTime64('2026-11-01 12:00:00',6,'UTC') + toIntervalSecond(seconds) as graded_at,
+              toFloat64(score) as score_pct, 'observed' as score_status, linkage_status
+          from values('event_id String, seconds UInt8, score UInt8, linkage_status String',
+             ('old',1,0,'resolved'),('new',2,10,'resolved'),('tie',2,20,'resolved'),('pending',3,80,'unregistered_or_unresolved_actor'))
+      - input: ref('rpt_pss_activity_attempts')
+        format: sql
+        rows: |
+          select 'A' as ccx_id, 'L' as actor_id, 'section' as subsection_block_id, 'measureup' as provider,
+            id as attempt_key, if(id='old','Quiz',if(id='early',null,'Final Exam')) as activity_type,
+            'Final Exam' as catalog_activity_type, cast(null as Nullable(DateTime64(6,'UTC'))) as attempt_finished_at,
+            false as is_finished, cast(null as Nullable(Float64)) as score_pct, 'missing_score' as score_status
+          from values('id String',('p'),('old'),('early'))
+    expect:
+      format: sql
+      rows: |
+        select 'A' as ccx_id, 'L' as actor_id, 'section' as subsection_block_id, provider,source_id,
+          if(is_finished,toDateTime64('2026-11-01 12:00:02',6,'UTC'),null) as observed_at,
+          is_finished,score_pct,score_status
+        from values('provider String, source_id String, is_finished Bool, score_pct Nullable(Float64), score_status String',
+              ('native','new',true,10,'observed'),('native','tie',true,20,'observed'),
+              ('measureup','p',false,NULL,'unfinished_attempt'),('measureup','early',false,NULL,'activity_type_at_start_unavailable'))

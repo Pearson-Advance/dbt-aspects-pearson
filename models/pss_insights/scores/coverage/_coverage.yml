@@ -1,0 +1,28 @@
+version: 2
+
+seeds:
+  - name: pss_attempt_coverage_evidence
+    description: >-
+      Header-only input for independently reconciled participation coverage. All times are UTC.
+      Each evidence reference must certify all applicable feeds, identity resolution, rules and
+      the published class activity for the entire bounded interval against refreshed facts.
+    config:
+      tags: [pss_scores]
+      column_types:
+        ccx_id: String
+        subsection_block_id: String
+        snapshot_id: String
+        coverage_start: String
+        coverage_end: String
+        verified_at: String
+        evidence_ref: String
+
+models:
+  - name: int_pss_activity_attempt_coverage
+    description: >-
+      One continuous independently verified UTC participation interval for a currently
+      applicable class and subsection. Adjacent or overlapping certificates for the
+      same publication combine. Missing evidence leaves the interval unavailable.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [ccx_id, subsection_block_id, coverage_start]

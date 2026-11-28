@@ -31,7 +31,7 @@ Do not independently move `packages.yml` to a newer `aspects-dbt` tag. Upgrade t
 ├── models/
 │   ├── course_licensing/   # Pearson Course Licensing models
 │   ├── measureup/          # Pearson MeasureUp models
-│   ├── pss_insights/       # PSS Insights activity, grading-policy and subdomain models
+│   ├── pss_insights/       # PSS class context, activity inventory, scores, attempts and Quiz items
 │   └── shared/             # Cross-domain intermediate models
 ├── scripts/
 │   └── validate_project.py # Static compatibility guard

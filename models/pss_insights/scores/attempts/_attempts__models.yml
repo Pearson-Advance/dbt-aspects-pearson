@@ -1,0 +1,149 @@
+version: 2
+
+models:
+  - name: int_pss_lti_subsection_links
+    description: >
+      One stable master LTI or LTI-consumer block. Observed section and subsection
+      coordinates resolve to a parent within the same Aspects course dump. Changed
+      parents, missing parents, and ambiguous coordinates withhold linkage. The
+      upstream block export does not establish historical ownership before its
+      earliest observation. first_parent_observed_at is the first UTC dump containing
+      both the block and its unambiguous parent. Individual block edits do not date
+      a parent relationship and the sink omits the Studio revision ID.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [master_course, master_block_id]
+    columns:
+      - name: parent_status
+        data_tests:
+          - accepted_values:
+              values: [linked, ambiguous_lti_parent, missing_lti_parent]
+
+  - name: int_pss_measureup_attempt_evidence
+    description: >
+      Restricted reconciliation view at surviving MeasureUp attempt primary key.
+      Resolves the launch's exact CCX, its numeric LMS user through the class context
+      roster, and its LTI block through the activity catalog. A
+      conflicting launch/test product is retained as a diagnostic. Actor, course
+      enrollment and instructor multiplicity cannot create additional fact rows.
+      Each surviving provider PK names one observed LMS integration record.
+    columns:
+      - name: exam_attempt_id
+        data_tests: [not_null, unique]
+      - name: link_status
+        data_tests: [not_null]
+
+  - name: int_pss_measureup_attempt_diagnostics
+    description: >
+      Restricted evidence for an unmapped surviving attempt or a scoped LTI launch
+      without a surviving attempt. Preserve the original integration identifiers
+      for operational tracebacks. Launch-only evidence cannot establish a sitting.
+
+  - name: int_pss_measureup_attempt_rules
+    description: >
+      Approved rule per master, classified activity type, normalized flow state
+      and mode. Reject ambiguous or invalid configuration. A persisted practice
+      or final can qualify under its exact reviewed rule independently of its score.
+    columns:
+      - name: valid_rule
+        data_tests:
+          - accepted_values:
+              values: [1]
+              quote: false
+
+  - name: int_pss_measureup_score_units
+    description: Reviewed source unit and version-pairing policy per master. Reject repeated or malformed configuration.
+    columns:
+      - name: valid_policy
+        data_tests:
+          - accepted_values:
+              values: [1]
+              quote: false
+
+  - name: rpt_pss_activity_attempts
+    description: >
+      One linked MeasureUp whole-activity attempt per class and registered actor.
+      Stored by institution, class, actor, subsection and attempt key. The
+      replacement refresh depends on the physical course-structure refresh and
+      reads current-state source models, including tombstone filtering.
+      Corrections or deletions may change prior periods. An unobserved attempt
+      or an open eligibility rule cannot certify a zero.
+    data_tests:
+      - dbt_utils.expression_is_true:
+          expression: "(numbering_status = 'numbered') = isNotNull(attempt_number) and (attempt_number is null or sequence_eligibility = 1)"
+      - dbt_utils.expression_is_true:
+          expression: "(version_status = 'verified') = isNotNull(cut_score) and (cut_score is null or (cut_score between 0 and 100 and cut_score = catalog_cut_score))"
+      - dbt_utils.expression_is_true:
+          expression: "(score_status = 'observed') = isNotNull(score_pct) and (score_pct is null or score_pct between 0 and 100)"
+    columns:
+      - name: attempt_key
+        description: String provider namespace plus ExamTestAttempt primary key. Use exam_attempt_id for provider item joins.
+        data_tests: [unique, not_null]
+      - name: ccx_id
+        description: String exact launched CCX key.
+        data_tests: [not_null]
+      - name: actor_id
+        description: String resolved xAPI actor belonging to this CCX.
+        data_tests: [not_null]
+      - name: subsection_block_id
+        description: String logical master sequential from the applicable class catalog.
+        data_tests: [not_null]
+      - name: activity_type
+        description: Nullable Studio activity type from the verified class publication covering the attempt start.
+      - name: catalog_activity_type
+        description: Current or last observed catalog type for the same class subsection.
+      - name: attempt_catalog_snapshot_id
+        description: Nullable observed Studio revision in effect at the provider start.
+      - name: first_parent_observed_at
+        description: Earliest UTC Aspects structural observation of the stable LTI parent. An attempt with a known earlier start remains in diagnostics.
+      - name: classification_status
+        description: A missing start or unavailable applicable publication leaves eligibility unknown.
+      - name: catalog_snapshot_id
+        description: Published revision used for current or last-observed class curriculum attribution. This is distinct from the provider test version.
+      - name: activity_in_latest_publish
+        description: Current publication flag from the class activity catalog.
+      - name: attempted_at
+        description: Nullable UTC DateTime64(6) parsed from the provider-reported start. Apply half-open date windows after attempt numbering.
+      - name: attempt_finished_at
+        description: Nullable UTC DateTime64(6) parsed from the provider-reported finish.
+      - name: provider_attempt_number
+        description: >
+          Nullable UInt64. Existing MeasureUp sequence for finished starts per
+          numeric LMS user, CCX, exact test id and normalized mode, with numeric
+          attempt ID breaking time ties. Multiple logical activities sharing
+          that exact test and mode also share its provider ordinal.
+      - name: attempt_number
+        description: >
+          Nullable UInt64 PSS ordinal per registered actor, CCX, logical
+          subsection, exact catalog test ID and normalized mode. Orders approved
+          practice or final sittings by their respective eligibility; Quiz and
+          Lab use the participation rule. Start time, numeric provider PK and
+          source PK break ties before display filtering.
+      - name: numbering_status
+        description: Explains a missing ordinal due to eligibility, time, test version or mode.
+      - name: is_finished
+        description: Finished flow state with a known finish and no contradiction between source start and finish.
+      - name: raw_score
+        description: Source decimal text, retained for missing, invalid and ambiguous-scale records.
+      - name: score_pct
+        description: Nullable Float64 percent using the reviewed source unit. Zero survives any supported scale. Unfinished records may carry provisional source scores.
+      - name: is_passed
+        description: Nullable Bool provider evidence. Unknown encodings are NULL. Preserve any disagreement with the score and exam rule.
+      - name: exam_test_id
+        description: Raw attempted ExamTest foreign key, including the original value when its catalog record is missing.
+      - name: catalog_test_id
+        description: Nullable String exact matching versioned ExamTest primary key. Ingestion selects the response-level test structure.
+      - name: version_updated_at
+        description: Nullable DateTime64(6) UTC from the provider test version's last update.
+      - name: catalog_cut_score
+        description: Nullable Float64 percent validated from the referenced version's catalog. Independent of evidence that it applied at attempt time.
+      - name: cut_score
+        description: Nullable Float64 percent. Requires an exact FK, version timestamp no later than the start, consistent observed version and threshold history, and verified provider version pairing for this master.
+      - name: is_participation
+        description: Nullable UInt8 activity delivery evidence under the exact approved state and mode rule.
+      - name: is_eligible_practice
+        description: Nullable UInt8 practice eligibility. Zero outside Practice Exam. No score is required.
+      - name: is_qualifying_final
+        description: Nullable UInt8 final eligibility. Zero outside Final Exam. No score is required.
+      - name: eligibility_status
+        description: Missing rule, invalid rule or unverified finish is explicit. Downstream consumers must preserve unknown decisions.
