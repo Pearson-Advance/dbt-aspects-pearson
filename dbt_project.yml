@@ -27,6 +27,9 @@ clean-targets:
 models:
   dbt_aspects_pearson:
     +materialized: view
+    pss_insights:
+      scores:
+        +tags: ["pss_scores"]
 
 seeds:
   dbt_aspects_pearson:

@@ -1,0 +1,153 @@
+unit_tests:
+  - name: test_pss_quiz_item_parent_chain_and_scope
+    model: int_pss_measureup_quiz_item_evidence
+    given:
+      - input: ref('int_measureup_exam_question_attempt_current')
+        format: sql
+        rows: |
+          select *, '2026-01-02T11:00:00Z' as source_updated_at, '2026-01-03T01:00:00Z' as time_last_dumped
+          from values('source_id String, question_id String, subdomain_attempt_id String, status String, score String',
+            ('301','9','21','answered','75.5'), ('302','9','21','answered','0'), ('303','8','21','unanswered',''),
+            ('304','7','22','answered','90'), ('305','7','gone','answered','50'), ('306','7','missingdomain','answered','90'),
+            ('307','6','23','answered','50'), ('308','','21','answered','1'), ('','4','21','answered','25'),
+            ('309','9','24','answered','10'), ('310','9','25','answered','20'), ('311','95','21','answered','30'))
+      - input: ref('int_measureup_exam_attempt_subdomain_current')
+        format: sql
+        rows: |
+          select *, '72' as exam_subdomain_id from values('source_id String, attempt_domain_id String',
+            ('21','11'), ('22','12'), ('23','13'), ('24','14'), ('25','15'), ('missingdomain','gone'))
+      - input: ref('int_measureup_exam_attempt_domain_current')
+        format: sql
+        rows: |
+          select *, '70' as exam_domain_id from values('source_id String, exam_attempt_id String',
+            ('11','101'), ('12','102'), ('13','103'), ('14','104'), ('15','105'))
+      - input: ref('rpt_pss_activity_attempts')
+        format: sql
+        rows: |
+          select *, concat('mup:', exam_attempt_id) as attempt_key, 'measureup' as provider, 'i' as institution_id,
+            'ccx' as ccx_id, 'm' as master_course, 's' as subsection_block_id, 'L' as actor_id,
+            if(exam_attempt_id='105','other-test','test') as exam_test_id, 'verified' as version_status, toDateTime64('2026-01-01 00:00:00',6,'UTC') as version_updated_at, toDateTime64('2026-01-02 10:00:00',6,'UTC') as attempted_at,
+            toDateTime64('2026-01-02 11:00:00',6,'UTC') as attempt_finished_at
+          from values('exam_attempt_id String, activity_type Nullable(String)', ('101','Quiz'), ('102','Lab'), ('104',null), ('105','Quiz'))
+      - input: ref('int_measureup_question_current')
+        format: sql
+        rows: |
+          select * from values('source_id String, exam_subdomain_id String',('9','72'),('95','99'))
+      - input: ref('int_measureup_exam_subdomain_current')
+        format: sql
+        rows: |
+          select * from values('source_id String, exam_domain_id String',('72','70'),('99','70'))
+      - input: ref('int_measureup_exam_domain_current')
+        format: sql
+        rows: |
+          select '70' as source_id, 'test' as exam_test_id
+    expect:
+      format: sql
+      rows: |
+        select source_result_id, question_id, attempt as source_exam_attempt_id,
+          if(attempt is null, null, '70') as exam_domain_id,
+          if(linkage_status='missing_subdomain_attempt',null,'72') as exam_subdomain_id,
+          if(scoped,'i',null) as institution_id, if(scoped,'ccx',null) as ccx_id, if(scoped,'m',null) as master_course,
+          if(scoped,'s',null) as subsection_block_id, if(scoped,'L',null) as actor_id,
+          if(scoped,concat('mup:',attempt),null) as attempt_key, if(scoped,if(attempt='105','other-test','test'),null) as exam_test_id, if(scoped,'verified',null) as version_status,
+          if(scoped,toDateTime64('2026-01-01 00:00:00',6,'UTC'),null) as version_updated_at,
+          if(scoped,toDateTime64('2026-01-02 10:00:00',6,'UTC'),null) as attempted_at,
+          if(scoped,toDateTime64('2026-01-02 11:00:00',6,'UTC'),null) as attempt_finished_at,
+          if(source_result_id='303','unanswered','answered') as provider_status, source_score,
+          toDateTime64('2026-01-02 11:00:00',6,'UTC') as source_updated_at, toDateTime64('2026-01-03 01:00:00',6,'UTC') as observed_at,
+          multiIf(source_result_id in ('310','311'),'conflicting',source_result_id in ('301','302','309'),'verified','unavailable') as item_catalog_status,
+          linkage_status, toFloat64OrNull(source_score) as provider_score, source_result_count
+        from values('source_result_id String, question_id String, attempt Nullable(String), scoped Bool, source_score Nullable(String), linkage_status String, source_result_count UInt64',
+          ('301','9','101',true,'75.5','linked',2), ('302','9','101',true,'0','linked',2),
+          ('303','8','101',true,null,'linked',1), ('305','7',null,false,'50','missing_subdomain_attempt',1),
+          ('306','7',null,false,'90','missing_domain_attempt',1), ('307','6','103',false,'50','parent_attempt_unresolved_or_outside_scope',1),
+          ('308','','101',true,'1','missing_question_id',1), ('','4','101',true,'25','missing_result_id',1),
+          ('309','9','104',true,'10','activity_type_at_start_unavailable',1), ('310','9','105',true,'20','item_catalog_conflict',1),
+          ('311','95','101',true,'30','item_catalog_conflict',1))
+
+  - name: test_pss_quiz_item_preserves_an_unscored_untagged_or_disputed_item
+    model: rpt_pss_quiz_item_results
+    given:
+      - input: ref('int_pss_measureup_quiz_item_evidence')
+        format: sql
+        rows: |
+          select *, 'i' as institution_id, 'ccx' as ccx_id, 'm' as master_course, 's' as subsection_block_id,
+            'L' as actor_id, 'mup:101' as attempt_key, '101' as source_exam_attempt_id, '12' as exam_test_id, 'verified' as version_status, toDateTime64('2026-01-01 00:00:00',6,'UTC') as version_updated_at,
+            if(question_id='e','unavailable','verified') as item_catalog_status, '9' as exam_domain_id, '72' as exam_subdomain_id,
+            toDateTime64('2026-01-02 10:00:00',6,'UTC') as attempted_at, attempted_at as attempt_finished_at,
+            attempted_at as source_updated_at, attempted_at as observed_at
+          from values('source_result_id String, question_id String, source_score Nullable(String), provider_score Nullable(Float64), provider_status String, source_result_count UInt64, linkage_status String',
+            ('301','a','75.5',75.5,'answered',2,'linked'), ('302','a','0',0,'answered',2,'linked'),
+            ('303','b',null,null,'unanswered',1,'linked'), ('304','c','0',0,'answered',1,'linked'),
+            ('305','x','1',1,'answered',1,'missing_domain_attempt'), ('306','d','bad',null,'answered',1,'linked'),
+            ('307','e','12.5',12.5,'answered',1,'linked'), ('308','f',null,null,'answered',1,'linked'))
+    expect:
+      format: sql
+      rows: |
+        select 'i' as institution_id, 'ccx' as ccx_id, 'm' as master_course, 's' as subsection_block_id,
+          'L' as actor_id, 'measureup' as provider, 'mup:101' as attempt_key, '101' as exam_attempt_id, '12' as exam_test_id,
+          'verified' as version_status, toDateTime64('2026-01-01 00:00:00',6,'UTC') as version_updated_at,
+          provider_item_id, concat('measureup:question:',provider_item_id) as item_key,
+          toDateTime64('2026-01-02 10:00:00',6,'UTC') as attempted_at, attempted_at as attempt_finished_at,
+          source_result_id, multiIf(source_result_id is null,'selection_unavailable',provider_item_id='e','unavailable','verified') as item_catalog_status,
+          if(item_catalog_status='verified','9',null) as exam_domain_id, if(item_catalog_status='verified','72',null) as exam_subdomain_id,
+          if(source_result_id is null,null,attempted_at) as source_updated_at, source_updated_at as observed_at,
+          cast(null as Nullable(DateTime64(6,'UTC'))) as item_answered_at, item_outcome, provider_item_score,
+          cast(null as Nullable(Float64)) as earned_points, earned_points as possible_points, source_result_count, result_status
+        from values('provider_item_id String, source_result_id Nullable(String), provider_item_score Nullable(Float64), item_outcome Nullable(String), source_result_count UInt64, result_status String',
+          ('a',null,null,null,2,'within_attempt_selection_unapproved'), ('b','303',null,'unanswered',1,'unanswered'),
+          ('c','304',0,'answered',1,'provider_score_observed'), ('d','306',null,'answered',1,'score_invalid'),
+          ('e','307',12.5,'answered',1,'provider_score_observed'), ('f','308',null,'answered',1,'score_missing'))
+
+  - name: test_pss_native_statement_keeps_points_and_reports_missing_sitting
+    model: int_pss_native_item_evidence
+    given:
+      - input: ref('xapi_events_all_parsed')
+        format: sql
+        rows: |
+          select *, 'https://w3id.org/xapi/acrossx/verbs/evaluated' as verb_id,
+            toDateTime64('2026-01-02 10:00:00',6,'UTC') as emission_time,
+            concat('url/xblock/ccx-block-v1:O+C+R+ccx@1+type@problem+block@', if(event_id='ambiguous','p2','p_1')) as object_id,
+            concat('{"result":', value, '}') as event
+          from values('course_key String, event_id String, actor_id String, value String',
+            ('ccx-v1:O+C+R+ccx@1','zero','L','{"success":false,"score":{"raw":0,"max":8}}'),
+            ('ccx-v1:O+C+R+ccx@1','zero','L','{"success":false,"score":{"raw":0,"max":8}}'),
+            ('ccx-v1:O+C+R+ccx@1','blank','L','{}'),
+            ('ccx-v1:O+C+R+ccx@1','partial','L','{"score":{"raw":1,"max":2}}'),
+            ('ccx-v1:O+C+R+ccx@1','bad','L','{"score":{"raw":0}}'),
+            ('ccx-v1:O+C+R+ccx@1','bad','L','{"score":{"raw":1}}'),
+            ('ccx-v1:O+C+R+ccx@1','pending','unknown','{}'), ('ccx-v1:O+C+R+ccx@1','ambiguous','L','{}'),
+            ('ccx-v1:O+C+R+ccx@99','outside','L','{}'))
+      - input: ref('int_pss_class_scope')
+        format: sql
+        rows: |
+          select 'ccx-v1:O+C+R+ccx@1' as ccx_id, '1' as ccx_number
+      - input: ref('int_pss_activity_catalog')
+        format: sql
+        rows: |
+          select 'ccx-v1:O+C+R+ccx@1' as ccx_id, 'course-v1:O+C+R' as master_course,
+            subsection_block_id, 'Quiz' as activity_type, true as in_latest_publish
+          from values('subsection_block_id String',('s'),('other'))
+      - input: ref('dim_course_blocks')
+        format: sql
+        rows: |
+          select 'course-v1:O+C+R' as course_key, subsection_block_id,
+            concat('block-v1:O+C+R+type@problem+block@', local_id) as block_id, true as in_latest_publish, 'problem' as block_type
+          from values('local_id String, subsection_block_id String',('p_1','s'),('p2','s'),('p2','other'))
+      - input: ref('int_pss_learner_class_context')
+        format: sql
+        rows: |
+          select 'ccx-v1:O+C+R+ccx@1' as ccx_id, 'L' as actor_id, toUInt8(1) as is_registered
+    expect:
+      format: sql
+      rows: |
+        select 'ccx-v1:O+C+R+ccx@1' as ccx_id, source_result_id, actor_id,
+          if(source_result_id='bad',null,concat('ccx-block-v1:O+C+R+ccx@1+type@problem+block@',if(source_result_id='ambiguous','p2','p_1'))) as source_item_id,
+          if(source_result_id in ('bad','ambiguous'),null,'block-v1:O+C+R+type@problem+block@p_1') as problem_block_id,
+          if(source_result_id in ('bad','ambiguous'),null,'s') as current_subsection_block_id, if(source_result_id in ('bad','ambiguous'),null,'Quiz') as current_activity_type,
+          toDateTime64('2026-01-02 10:00:00',6,'UTC') as first_emission_at, cast(null as Nullable(DateTime64(6,'UTC'))) as statement_at,
+          cast(null as Nullable(UInt32)) as problem_attempt_ordinal, earned_points, possible_points, succeeded, linkage_status
+        from values('source_result_id String, actor_id Nullable(String), earned_points Nullable(Float64), possible_points Nullable(Float64), succeeded Nullable(UInt8), linkage_status String',
+          ('zero','L',0,8,0,'whole_sitting_key_unavailable'), ('blank','L',null,null,null,'whole_sitting_key_unavailable'),
+          ('partial','L',1,2,null,'whole_sitting_key_unavailable'), ('bad',null,null,null,null,'conflicting_statement'),
+          ('pending',null,null,null,null,'registered_actor_unresolved'), ('ambiguous','L',null,null,null,'ambiguous_current_activity'))

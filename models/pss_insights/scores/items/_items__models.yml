@@ -1,0 +1,98 @@
+version: 2
+
+models:
+  - name: int_pss_measureup_quiz_item_evidence
+    description: >-
+      Restricted reconciliation, one current MeasureUp question-result primary key per row.
+      Uses the same question → subdomain attempt → domain attempt path as
+      rpt_measureup_question_performance. Only confirmed Quiz sittings reach the public
+      item report. An unlinked result may be outside PSS scope and cannot be assigned to
+      an instructor or included in class totals. The four-hour replacement refresh
+      follows the physical PSS attempts refresh. Raw answers are excluded.
+    columns:
+      - name: source_result_id
+        data_tests: [unique, not_null]
+      - name: linkage_status
+        data_tests:
+          - accepted_values:
+              values: [linked, missing_result_id, missing_subdomain_attempt, missing_domain_attempt, parent_attempt_unresolved_or_outside_scope, activity_type_at_start_unavailable, missing_question_id, item_catalog_conflict]
+      - name: provider_score
+        description: Nullable Float64 parsed from the provider's raw Decimal score. The source supplies no item maximum or guaranteed exchange scale.
+      - name: source_updated_at
+        description: Nullable UTC source-envelope timestamp. Its default on a full dump is the parent attempt finish time.
+      - name: observed_at
+        description: Nullable UTC time of this record's latest sink dump. Neither timestamp establishes when the item was answered.
+
+  - name: int_pss_native_item_evidence
+    description: >-
+      Restricted evidence per in-scope CCX and evaluated xAPI statement ID. Duplicated
+      deliveries collapse and conflicting statements retain a diagnostic. Matched
+      actor IDs come from the registered class roster. A multi-question child keeps
+      its source key and may resolve its containing problem using the statement's parent.
+      Current structure supplies the subsection and activity mapping. Native statements
+      have no whole-Quiz sitting ID. Their problem ordinals, outcomes and points are
+      available for reconciliation. This four-hour replacement refresh follows the
+      published structure refresh. No learner response payload is exposed.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [ccx_id, source_result_id]
+    columns:
+      - name: statement_at
+        description: Nullable UTC timestamp from the xAPI statement. The emission timestamp is retained separately.
+      - name: earned_points
+        description: Nullable Float64 read from an explicit xAPI result.score.raw numeric field, including zero.
+      - name: possible_points
+        description: Nullable Float64 read from an explicit xAPI result.score.max numeric field.
+      - name: succeeded
+        description: Nullable UInt8. A missing success property is unknown.
+      - name: linkage_status
+        data_tests:
+          - accepted_values:
+              values: [conflicting_statement, registered_actor_unresolved, ambiguous_current_activity, current_activity_unresolved, whole_sitting_key_unavailable]
+
+  - name: rpt_pss_quiz_item_results
+    description: >-
+      One item per verified PSS Quiz sitting. Join to the whole sitting on attempt_key.
+      This view reads the four-hour replacement snapshot of the latest active provider
+      result rows. One result primary key is selectable; several candidate keys
+      withhold the selected result pending the item result selection decision.
+      Tombstones and corrected dumps take effect on the next refresh. Item
+      occurrence history is unavailable; filter by the separately named attempt
+      timestamps for sitting-based UTC periods.
+      Item mappings require a verified provider-to-taxonomy bridge before enrichment.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [attempt_key, item_key]
+    columns:
+      - name: item_catalog_status
+        description: >-
+          Verified means the provider question's subdomain, domain and versioned exam
+          match the sitting's own FK chain. Known conflicts are quarantined. A missing
+          question dictionary keeps a supported result for its source question PK and
+          withholds its objective IDs. Candidate selection ambiguity withholds the check.
+        data_tests:
+          - accepted_values:
+              values: [verified, unavailable, selection_unavailable]
+      - name: attempt_key
+        data_tests: [not_null]
+      - name: exam_test_id
+        description: Source exam-test FK for version joins, as carried on the parent sitting.
+      - name: item_key
+        description: MeasureUp Django question PK namespaced by provider and entity. Provider external IDs can repeat across test versions.
+        data_tests: [not_null]
+      - name: source_result_id
+        description: Nullable String Django question-result PK. Additional live result IDs require a selection decision.
+      - name: item_outcome
+        description: Nullable source status, for example answered or unanswered. This field preserves the provider vocabulary.
+      - name: provider_item_score
+        description: Nullable Float64 in provider-native score units. Retains explicit zero and partial values.
+      - name: earned_points
+        description: Nullable Float64. The MeasureUp feed does not specify a points numerator or denominator.
+      - name: possible_points
+        description: Nullable Float64. A configured denominator requires separate provider evidence.
+      - name: item_answered_at
+        description: Nullable UTC DateTime64(6). The MeasureUp feed supplies no per-item answer time.
+      - name: result_status
+        data_tests:
+          - accepted_values:
+              values: [provider_score_observed, score_missing, score_invalid, unanswered, within_attempt_selection_unapproved]

@@ -1,0 +1,66 @@
+version: 2
+
+models:
+  - name: int_pss_native_subsection_grades
+    description: >-
+      Restricted diagnostic view of earned xAPI statements with a sequential object in an
+      in-scope CCX. Repeated immutable statement IDs collapse across deliveries. Conflicting contents are quarantined. The CCX must have the registered
+      actor and the exact master or class subsection key in its own catalog. Unmatched actors
+      have a NULL actor_id. Statement IDs and UTC event times identify LMS observations. Grade time is the statement timestamp when present, otherwise the first emission. A changed or unavailable historical type cannot supply a current score.
+      The router exports weighted_total_earned and weighted_total_possible as raw and max.
+      Counts and scores reflect the LMS subsection grade, including partial credit.
+      Raw responses, account names and learner personal information are excluded.
+    columns:
+      - name: linkage_status
+        data_tests:
+          - accepted_values:
+              values: [resolved, unregistered_or_unresolved_actor, unmapped_subsection, historical_subsection, conflicting_statement, activity_type_at_grade_unavailable, activity_type_changed]
+      - name: score_status
+        data_tests:
+          - accepted_values:
+              values: [observed, missing_grade_field, invalid_lms_score, inconsistent_lms_score, conflicting_statement]
+      - name: earned_points
+        description: Nullable Float64. Total weighted earned points reported by the LMS.
+      - name: possible_points
+        description: Nullable Float64. Total weighted possible points in the same LMS observation.
+      - name: scaled_score
+        description: Nullable Float64. Original LMS scaled fraction used to check consistency with raw and max.
+
+  - name: int_pss_activity_score_candidates
+    description: >-
+      One candidate per latest registered learner LMS grade observation or current,
+      distinct MeasureUp sitting. Tied latest LMS statements remain visible. Unfinished
+      and invalid results remain assessable under their original source ID.
+
+  - name: rpt_pss_activity_scores_current
+    description: >-
+      One current score assessment per eligible CCX, registered actor and applicable
+      current master subsection with score or sitting evidence. Replaced every four hours
+      after the PSS attempts and Aspects course structure refreshes. Score is a nullable
+      Float64 percent. The default agreement rule publishes a value only when all current
+      candidates supply the same valid score. Conflicting sources, retakes or missing
+      scores require an owner decision. Per-run and activity-type pss_current_score_rules
+      can explicitly choose lms_subsection or measureup_latest_finished. A tie with
+      different scores under the chosen rule stays unavailable.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [ccx_id, actor_id, subsection_block_id]
+    columns:
+      - name: score_pct
+        description: Observed 0 through 100, or NULL with an explicit score_status.
+        data_tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 100
+      - name: score_source
+        description: Nullable String. Native LMS, MeasureUp or both sources in agreement.
+      - name: score_observed_at
+        description: Nullable DateTime64(6, UTC). Most recent LMS grade or provider finish time among the selected evidence.
+      - name: selected_source_ids
+        description: Sorted array of (provider, source ID) tuples considered by the selection rule.
+      - name: native_grade_count
+        description: Distinct latest LMS statement IDs, including statements tied in time.
+      - name: provider_attempt_count
+        description: Distinct provider attempt keys observed on the activity, including retakes.
+      - name: evidence_gaps
+        description: Sorted distinct reasons carried by incomplete selected source evidence.
