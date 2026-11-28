@@ -17,7 +17,7 @@ from pss_scores.replay import Fixture as ScoresFixture, database, provision
 from disposable import schema_paths
 from inputs import ACTOR, CLASS_A, CLASS_B, MASTER, OTHER, UNKNOWN
 from inputs import configure_readiness, load_source_rows, sitting
-from quiz import prepare_quiz, load_quiz_events, verify_quiz
+from quiz import prepare_quiz, load_quiz_events, verify_quiz, verify_observed_tag_history
 from native import EARNED, statement
 
 
@@ -82,7 +82,7 @@ def refresh(f):
         ddl = f.sql("SHOW CREATE TABLE " + name + " FORMAT TSVRaw")
         identifier = r"(?:`[^`]+`|\w+)\.(?:`[^`]+`|\w+)"
         dependencies = re.search(
-            r"\bDEPENDS ON\s+(" + identifier + "(?:,\s*" + identifier + ")*)", ddl
+            r"\bDEPENDS ON\s+(" + identifier + r"(?:,\s*" + identifier + ")*)", ddl
         )
         graph[name] = (
             [edge.strip().replace("`", "") for edge in dependencies[1].split(",")]
@@ -94,6 +94,11 @@ def refresh(f):
         (WEAKNESSES, PRACTICE),
         (PRACTICE, "reporting.rpt_pss_activity_attempts"),
         (QUIZ, "reporting_pss_restricted.int_pss_native_item_evidence"),
+        (QUIZ, "reporting.int_pss_quiz_problem_objectives"),
+        (
+            "reporting.int_pss_quiz_problem_objectives",
+            "reporting.int_pss_course_tag_captures",
+        ),
     ]:
         if upstream + "_mv" not in graph[model + "_mv"]:
             raise AssertionError(
@@ -198,6 +203,7 @@ def exercise(f):
             f.expect(
                 f"repeatable pass {iteration} " + query.split()[3], query, expected
             )
+    verify_observed_tag_history(f, refresh)
     # Only a later LMS snapshot survives for this additional Quiz. It cannot
     # establish the date or the grade of a sitting in the selected hour.
     f.insert(

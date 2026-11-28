@@ -28,6 +28,8 @@ models:
   dbt_aspects_pearson:
     +materialized: view
     pss_insights:
+      reporting:
+        +tags: ["pss_reporting"]
       scores:
         +tags: ["pss_scores"]
       readiness:

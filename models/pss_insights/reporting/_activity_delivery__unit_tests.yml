@@ -1,0 +1,63 @@
+version: 2
+unit_tests:
+  - name: test_pss_class_catalog_coverage
+    model: int_pss_class_catalog_coverage
+    description: Preserve the producer's per-CCX publication and roster coverage for partial, empty and unresolved inventories.
+    given:
+      - input: ref('int_pss_class_inventory_coverage')
+        format: sql
+        rows: |
+          select *, 'I' as institution_id, 'M' as master_course, 'v' as snapshot_id from values('ccx_id String, inventory_status String',
+            ('A','partially_classified'),('B','no_graded_subsections'),('C','applicability_unavailable'),('D','classified'))
+      - input: ref('int_pss_roster_coverage')
+        format: sql
+        rows: |
+          select ccx_id, roster_status, registered_source_learners, unresolved_registered_learners,
+          registered_source_learners-unresolved_registered_learners as resolved_registered_learners, registered_actor_denominator
+          from values('ccx_id String, roster_status String, registered_source_learners UInt64, unresolved_registered_learners UInt64, registered_actor_denominator Nullable(UInt64)',
+            ('A','identity_incomplete',3,1,null),('B','empty',0,0,0),('C','resolved',1,0,1),('D','resolved',2,0,2))
+      - input: ref('int_pss_activity_catalog')
+        format: sql
+        rows: |
+          select *, 'I' as institution_id from values('ccx_id String, snapshot_id String, in_latest_publish Bool',
+            ('A','v',1), ('B','older',0), ('D','v',1))
+    expect:
+      format: sql
+      rows: |
+        select ccx_id, 'I' as institution_id,'M' as master_course, 'v' as snapshot_id, inventory_status,
+        known_published_activities, catalog_status, roster_status,registered_source_learners,unresolved_registered_learners,
+        registered_source_learners-unresolved_registered_learners as resolved_registered_learners,registered_actor_denominator
+        from values('ccx_id String,inventory_status String,known_published_activities UInt64,catalog_status String,roster_status String,registered_source_learners UInt64,unresolved_registered_learners UInt64,registered_actor_denominator Nullable(UInt64)',
+          ('A','partially_classified',1,'incomplete','identity_incomplete',3,1,null),('B','no_graded_subsections',0,'complete','empty',0,0,0),
+          ('C','applicability_unavailable',0,'unavailable','resolved',1,0,1),('D','classified',1,'complete','resolved',2,0,2))
+
+  - name: test_pss_reporting_class_reconciliation
+    model: int_pss_reporting_class_coverage
+    description: Exact scope, publication, freshness, explicit flags and unlinked final candidates determine whether a class claim is usable.
+    given:
+      - input: ref('int_pss_class_catalog_coverage')
+        format: sql
+        rows: |
+          select 'I' as institution_id, ccx_id, 'current' as snapshot_id,
+          if(ccx_id='partial','incomplete','complete') as catalog_status
+          from values('ccx_id String','verified','partial','unresolved','expired','wrong-publish','wrong-institution','conflict','untraceable')
+      - input: ref('pss_reporting_class_coverage_evidence')
+        format: sql
+        rows: |
+          select if(ccx_id='wrong-institution','J','I') as institution_id, ccx_id,
+          if(ccx_id='wrong-publish','old','current') as snapshot_id, is_complete as final_attempts_complete,
+          1 as navigation_complete,'2026-01-01 00:00:00' as verified_at,
+          if(ccx_id='expired','2026-01-02','2099-01-01') as valid_until,
+          if(ccx_id='untraceable','','source') as evidence_ref
+          from values('ccx_id String,is_complete UInt8',('verified',1),('partial',1),('unresolved',1),('conflict',1),('conflict',0),
+          ('expired',1),('wrong-publish',1),('wrong-institution',1),('untraceable',1))
+      - input: ref('int_pss_reporting_unlinked_attempts')
+        format: sql
+        rows: |
+          select 'I' as institution_id, ccx_id, 'learner' as actor_id, activity_type from values('ccx_id String,activity_type Nullable(String)',
+          ('verified','Quiz'),('unresolved',null))
+    expect:
+      format: sql
+      rows: |
+        select 'I' as institution_id,ccx_id,'current' as snapshot_id,final_attempts_complete,if(ccx_id='unresolved',['learner'],[]) as unresolved_final_actors,1 as navigation_complete
+        from values('ccx_id String,final_attempts_complete UInt8',('verified',1),('partial',0),('unresolved',1),('conflict',0))

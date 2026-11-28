@@ -8,7 +8,8 @@
             "interval": "EVERY 4 HOUR",
             "depends_on": [
                 target.schema ~ ".rpt_pss_activity_attempts_mv",
-                target.schema ~ ".dim_course_blocks_mv",
+                target.schema ~ ".int_pss_course_tag_captures_mv",
+                target.schema ~ ".int_pss_quiz_problem_objectives_mv",
                 target.schema ~ "_pss_restricted.int_pss_native_item_evidence_mv",
                 target.schema
                 ~ "_pss_restricted.int_pss_measureup_quiz_item_evidence_mv",

@@ -73,6 +73,11 @@ with
             if(consistent, variants[1] .1, '') as observed_actor,
             if(consistent, variants[1] .2, '') as object_usage_key,
             if(consistent, variants[1] .3, '') as parent_usage_key,
+            if(
+                position(parent_usage_key, '+type@problem+block@') > 0,
+                parent_usage_key,
+                object_usage_key
+            ) as problem_usage_key,
             if(consistent, variants[1] .4, null) as statement_at,
             if(consistent, toFloat64OrNull(variants[1] .5), null) as raw_points,
             if(consistent, toFloat64OrNull(variants[1] .6), null) as max_points,
@@ -117,6 +122,7 @@ select
     i.source_result_id as source_result_id,
     nullIf(r.actor_id, '') as actor_id,
     nullIf(i.object_usage_key, '') as source_item_id,
+    nullIf(i.problem_usage_key, '') as source_problem_usage_key,
     nullIf(p.resolved_problem, '') as problem_block_id,
     nullIf(p.resolved_subsection, '') as current_subsection_block_id,
     nullIf(p.resolved_type, '') as current_activity_type,
@@ -146,11 +152,4 @@ left join
     and i.observed_actor = r.actor_id
     and r.is_registered = 1
 left join
-    current_problems as p
-    on i.ccx_id = p.ccx_id
-    and if(
-        position(i.parent_usage_key, '+type@problem+block@') > 0,
-        i.parent_usage_key,
-        i.object_usage_key
-    )
-    = p.usage_key
+    current_problems as p on i.ccx_id = p.ccx_id and i.problem_usage_key = p.usage_key

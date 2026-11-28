@@ -5,29 +5,40 @@ models:
     description: >-
       Optional restricted adapter selected by pss_native_quiz_context_model.
       The default produces zero typed rows. Each supplied row must attest a selected
-      native xAPI statement representing the eligible item result within one whole-Quiz sitting and its applicable
-      objective set. The data owner must reconcile the full set of eligible scored
+      native xAPI statement representing the eligible item result within one whole-Quiz sitting. The data owner must reconcile the full set of eligible scored
       items in the sitting, record distinct selected source results and withdraw
       outdated evidence on correction. Inputs use String keys (ccx_id, actor_id,
       source_result_id, namespaced attempt_key, subsection_block_id, problem_block_id,
       snapshot_id), DateTime64(6, 'UTC') attempted_at, and String evidence_ref and
       mapping_ref. Objectives are Array(Tuple(UInt64, UInt64, UInt64)) containing
       Studio taxonomy, domain and subdomain PKs, with 0 for a domain-only subdomain.
-      A nonempty mapping_ref with an empty list certifies that the item had no
-      eligible tags. Supply evidence references to auditable records and refresh
+      An empty mapping_ref selects the objectives from the dated course export. A nonempty
+      mapping_ref also checks that the independently attested list matches the export,
+      including an empty list when the item had no eligible objectives. Supply evidence references to auditable records and refresh
       the adapter before dependent reports when its source changes.
 
   - name: int_pss_native_quiz_item_attribution
     description: >-
       Restricted diagnostics per in-scope native Quiz statement or missing selected result claimed by the adapter. Checks the registered
-      actor, item, applicable published Quiz, sitting identity and separately attested
-      assignments at attempt time against the current taxonomy IDs. A current tag
-      list alone cannot establish a historical mapping. Replayed identical claims
+      actor, original problem usage key and applicable Quiz at the sitting start and response.
+      Selects the most recent observed export of the master at or before the UTC xAPI
+      statement time, then verifies the problem, subsection and course-scoped taxonomy
+      within that export. Optional independently attested objectives must agree. Replayed identical claims
       collapse. Conflicting sources cannot split an item across two sittings.
     data_tests:
       - dbt_utils.unique_combination_of_columns:
           combination_of_columns: [ccx_id, source_result_id]
     columns:
+      - name: tag_capture_id
+        description: Nullable Aspects course dump UUID used to resolve objectives at the selected response.
+      - name: tags_observed_at
+        description: UTC observation time of the selected course export. It can precede changes made between exports.
+      - name: tag_evidence_status
+        description: Observed, or the reason the historical export, problem, placement, tag array or taxonomy could not be verified.
+      - name: has_mapping_claim
+        description: Nonzero when an independent objective set was supplied for comparison with the observed export.
+      - name: claimed_objective_keys
+        description: Distinct nonredundant taxonomy/domain/subdomain tuples from the optional mapping claim.
       - name: link_status
         data_tests:
           - accepted_values:
@@ -49,7 +60,7 @@ models:
       One row per institution, CCX, registered actor, provider, whole Quiz sitting
       and taxonomy/domain/subdomain. Empty objective keys retain unassigned items.
       Filter original UTC sitting starts for a cohort of attempts. Scores reflect the latest corrected item records, including answers or corrections after a selected period ended. The
-      replacement is scheduled every four hours after the physical attempts, structure
+      replacement is scheduled every four hours after the physical attempts, course tag captures, historical objectives
       and both item evidence refreshes. New source corrections, roster or mapping
       changes may revise past rows. Apply authorized class/institution filters on read.
     data_tests:
@@ -72,7 +83,7 @@ models:
         description: >-
           studio:<taxonomy PK> for native objectives or measureup:<versioned exam-test PK>
           for provider objectives. Domain and subdomain IDs are source-native PKs and
-          current names are display labels. Provider and Studio IDs have no crosswalk.
+          labels come from the native export-time dictionary or the current provider catalog. Provider and Studio IDs have no crosswalk.
       - name: observed_numerator
         description: Allocated earned points for native items or correct items for MeasureUp, restricted to resolved and scoreable items. May be partial.
       - name: observed_denominator

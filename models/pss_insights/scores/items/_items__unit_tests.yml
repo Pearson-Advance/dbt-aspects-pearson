@@ -143,6 +143,7 @@ unit_tests:
       rows: |
         select 'ccx-v1:O+C+R+ccx@1' as ccx_id, source_result_id, actor_id,
           if(source_result_id='bad',null,concat('ccx-block-v1:O+C+R+ccx@1+type@problem+block@',if(source_result_id='ambiguous','p2','p_1'))) as source_item_id,
+          source_item_id as source_problem_usage_key,
           if(source_result_id in ('bad','ambiguous'),null,'block-v1:O+C+R+type@problem+block@p_1') as problem_block_id,
           if(source_result_id in ('bad','ambiguous'),null,'s') as current_subsection_block_id, if(source_result_id in ('bad','ambiguous'),null,'Quiz') as current_activity_type,
           toDateTime64('2026-01-02 10:00:00',6,'UTC') as first_emission_at, cast(null as Nullable(DateTime64(6,'UTC'))) as statement_at,

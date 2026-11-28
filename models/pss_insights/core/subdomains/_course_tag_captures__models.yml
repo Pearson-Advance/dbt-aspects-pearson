@@ -1,0 +1,35 @@
+version: 2
+
+models:
+  - name: int_pss_course_tag_captures
+    description: >
+      One record per scoped master, UTC export time and problem, plus a course
+      header with an empty problem key for every export. Rebuilt from Aspects
+      course_blocks every four hours. Select the last header at or before the
+      reporting cutoff, then look for the problem at that exact time. A problem
+      absent from the selected export has no verifiable tags in that export.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [master_course, observed_at, problem_block_id]
+    columns:
+      - name: master_course
+        data_tests: [not_null]
+      - name: observed_at
+        description: UTC time_last_dumped, retaining the producer's microseconds.
+      - name: capture_id
+        description: Native dump UUID. NULL if export identity or ordering is ambiguous.
+      - name: subsection_block_id
+        description: Unique subsection at the problem's position in this export, when observed.
+      - name: capture_status
+        description: >
+          Observed problem rows carry the full exported array, including
+          ancestors. Only an observed empty array confirms that all tags are
+          absent. Conflicting exports or problem payloads and missing or malformed
+          tag arrays cannot verify membership. Header rows describe export identity.
+        data_tests:
+          - accepted_values:
+              values: [observed, ambiguous_capture, conflicting_payload, tags_unavailable]
+      - name: is_latest_capture
+        description: True for rows in the most recent course export as of the refresh time.
+      - name: tag_ids
+        description: Distinct positive native tag IDs, sorted for deterministic comparisons.

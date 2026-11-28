@@ -36,7 +36,7 @@ seeds:
 
 models:
   - name: int_pss_assignment_publications
-    description: One row per master and source publication instant. Replay deduplicates by revision and payload. Conflicting, malformed or unorderable revisions are unavailable.
+    description: One row per master and source publication instant. Replay deduplicates by revision and payload. Conflicting, malformed or unorderable revisions are unavailable. A row without a valid publication time is never the latest, so a later valid publication still applies.
   - name: int_pss_subsection_assignments
     description: One row per valid Studio revision and subsection, including ungraded blocks. The activity type uses the current approved master mapping.
   - name: int_pss_master_publication
@@ -60,7 +60,7 @@ models:
       - name: ccx_id
         data_tests: [unique, not_null]
   - name: int_pss_activity_catalog
-    description: Recognized, graded and applicable activities per CCX and master subsection, including never-attempted activities and observed historical revisions.
+    description: Recognized, graded and applicable activities per CCX and master subsection, including never-attempted activities and observed historical revisions. Current rows follow the latest valid publication even before it is verified; publication_status in the inventory coverage reports verification.
     data_tests:
       - dbt_utils.unique_combination_of_columns:
           combination_of_columns: [ccx_id, subsection_block_id]

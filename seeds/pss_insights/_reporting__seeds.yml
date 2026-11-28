@@ -1,0 +1,33 @@
+version: 2
+seeds:
+  - name: pss_reporting_class_coverage_evidence
+    description: >-
+      Independent class-wide reconciliation for final attempts and navigation. The data owner must
+      verify all providers, history, registered learner identity and current publication and maintain
+      reconciliation until expiry. Retract on source gaps. The default contains no evidence.
+    config:
+      tags: [pss_reporting]
+      column_types:
+        institution_id: String
+        ccx_id: String
+        snapshot_id: String
+        final_attempts_complete: UInt8
+        navigation_complete: UInt8
+        verified_at: String
+        valid_until: String
+        evidence_ref: String
+  - name: pss_activity_history_coverage
+    description: >-
+      Independent all-history participation reconciliation for the exact CCX, institution, published
+      snapshot and logical subsection. Certify every applicable provider, registered actor and rule,
+      maintain coverage until expiry and retract invalidated evidence. Use the score models' ledger for bounded intervals.
+    config:
+      tags: [pss_reporting]
+      column_types:
+        institution_id: String
+        ccx_id: String
+        snapshot_id: String
+        subsection_block_id: String
+        verified_at: String
+        valid_until: String
+        evidence_ref: String

@@ -63,8 +63,10 @@ select
         'invalid_publication',
         'observed'
     ) as snapshot_status,
+    -- A row without a valid time stays visible as invalid_publication_time, but
+    -- cannot become the latest; otherwise no later publication could replace it.
     row_number() over (
-        partition by master_course order by published_time desc nulls first
+        partition by master_course order by published_time is null, published_time desc
     )
     = 1 as is_latest
 from revisions

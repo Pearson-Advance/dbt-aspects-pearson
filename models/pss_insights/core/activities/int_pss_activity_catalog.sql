@@ -56,9 +56,6 @@ inner join
     applicable as a
     on c.ccx_id = a.applicable_ccx_id
     and c.master_course = a.master_course
-inner join
-    {{ ref("int_pss_master_publication") }} as p on p.master_course = a.master_course
-where
-    a.graded
-    and a.activity_type is not null
-    and (not a.in_latest_publish or p.publication_status = 'observed')
+-- Keep current activities while a publication awaits verification so attempts stay
+-- linkable; inventory coverage reports the publication status to consumers.
+where a.graded and a.activity_type is not null

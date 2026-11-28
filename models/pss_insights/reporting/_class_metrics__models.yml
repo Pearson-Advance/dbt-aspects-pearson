@@ -1,0 +1,110 @@
+version: 2
+
+models:
+  - name: rpt_pss_class_metrics
+    description: >
+      One current row per CCX in the class context population, including
+      empty classes. Apply class and institution access through an authorized
+      class-key filter before aggregating. Several instructor assignments can
+      authorize the same class. The four-hour replacement refresh follows the
+      learner, delivery and practice-subdomain materialized views. Fractions
+      range from zero to one. Use learner rows for master-course learner counts
+      and final pass rates.
+    columns:
+      - name: ccx_id
+        description: Stable CCX identifier for the class.
+        data_tests: [unique, not_null]
+      - name: institution_id
+        description: Institution scope for access checks and aggregation.
+      - name: master_course
+        description: Master course reported by the class context.
+      - name: reporting_date
+        description: Calendar date in the configured PSS reporting timezone (default UTC) when the current snapshot was calculated.
+      - name: is_active
+        description: >
+          Reporting date between effective CCX start and end, including both
+          endpoints. Missing or inverted dates yield NULL. Use the date columns
+          with pss_class_active_on for a different reporting date.
+      - name: registered_learners
+        description: Reconciled registered actor denominator, NULL when the source or any registered identity is unresolved.
+      - name: observed_registered_learners
+        description: Number of resolved registered actor rows used to calculate observed counts.
+      - name: registered_source_learners
+        description: Observed registered LMS people before resolving the cross-class actor identity.
+      - name: unresolved_registered_learners
+        description: Registered LMS people without a resolved actor.
+      - name: roster_status
+        description: Class context roster status for the class. The separate registered denominator also requires a reconciled source.
+      - name: readiness_available
+        description: >
+          Number of roster members in a calculated readiness band. The three
+          band proportions use this denominator pending business review.
+      - name: readiness_unavailable
+        description: Observed resolved memberships without a calculated band. Additional unresolved identities are reported separately.
+      - name: pct_on_target
+        description: On Target learners divided by readiness_available. A zero denominator or unverified roster yields NULL.
+      - name: class_risk
+        description: >
+          Low at 80% On Target or above, Medium from 70% up to 80%, and High
+          below 70%. An unavailable proportion leaves risk NULL.
+        data_tests:
+          - accepted_values:
+              values: ["Low", "Medium", "High"]
+      - name: requires_attention
+        description: True for Medium and High risk. NULL when risk is unavailable.
+      - name: support_reasons
+        description: >
+          For High risk, every available Quiz, Lab or Practice Exam average
+          strictly below 70%. Compare exact score sums against 0.70 times the relevant counts before display rounding.
+      - name: requires_instructor_support
+        description: >
+          True when there is a triggering reason. NULL if the risk is unknown
+          or if a High-risk class has no score evidence for any eligible type.
+      - name: avg_course_grade
+        description: Mean available current LMS course grade among registered learners.
+      - name: avg_content_progress
+        description: Mean available share of applicable published units visited per registered learner.
+      - name: avg_quiz_score
+        description: Mean available current learner-activity Quiz score.
+      - name: avg_lab_score
+        description: Mean available current learner-activity Lab score.
+      - name: avg_practice_exam_score
+        description: Mean available score over eligible practice-mode Practice Exam attempts.
+      - name: avg_final_exam_score
+        description: Mean available score over qualifying Final Exam attempts.
+      - name: weakest_practice_status
+        description: >
+          Ranked only when membership, inventory, practice participation and eligible
+          item attribution support a class-wide comparison. Full-history certificates
+          must match the current publication for each registered actor and Practice Exam.
+          An unlinked eligible candidate for a Practice Exam or an unknown activity type
+          leaves eligibility unresolved even with an otherwise valid certificate.
+        data_tests:
+          - accepted_values:
+              values: [ranked, roster_unverified, empty_roster, inventory_unavailable, eligibility_or_item_unavailable, practice_history_unverified, no_eligible_items]
+      - name: weakest_practice_subdomain_name
+        description: >
+          Practice subdomain with the lowest pooled correct/total item count
+          among roster members. Ties use the numeric provider subdomain ID,
+          then its raw ID and domain ID. An unavailable rank has NULL result fields.
+      - name: weakest_practice_correct_items
+        description: Pooled count of correct items for the ranked provider subdomain.
+      - name: weakest_practice_total_items
+        description: Pooled eligible item denominator for the ranked provider subdomain.
+      - name: final_pass_rate
+        description: >
+          Distinct learners with a qualifying pass divided by distinct learners
+          with a qualifying attempt. NULL when there are no attempts or a
+          learner's attempt/pass evidence could change the result. The attempted
+          and passed counts reflect known evidence.
+      - name: catalog_status
+        description: Complete, incomplete or unavailable published inventory. See int_pss_class_catalog_coverage.
+      - name: total_activities
+        description: Count of applicable published activities when catalog coverage is complete.
+      - name: completed_activities
+        description: >
+          Count attempted by every registered learner. NULL for empty rosters,
+          incomplete catalogs or indeterminate completion. A complete, genuinely
+          empty inventory with a nonempty roster returns zero.
+      - name: remaining_activities
+        description: Total minus completed, including applicable activities with zero attempts.
