@@ -85,6 +85,8 @@ class Fixture(inventory.Fixture):
 def refresh(f):
     for mv in [
         "reporting.dim_course_blocks_mv",
+        "reporting.int_pss_course_tag_captures_mv",
+        "reporting.int_pss_quiz_problem_objectives_mv",
         "reporting.rpt_measureup_attempts_mv",
         "reporting.rpt_measureup_question_performance_mv",
         "reporting.rpt_pss_activity_attempts_mv",

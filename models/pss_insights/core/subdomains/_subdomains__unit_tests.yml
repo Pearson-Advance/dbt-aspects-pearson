@@ -3,25 +3,28 @@
 # list every model column. Taxonomy 30 = subdomains, 20 = Blooms (not read).
 unit_tests:
   - name: test_pss_quiz_item_subdomain_map
-    description: >
-      One subdomain; several subdomains; domain-only tag; domain + own
-      subdomain (domain dropped); repeated tag collapsed to the newest
-      assignment; untagged question absent; Blooms ignored; stale tag on a
-      block not in the structure; library and out-of-scope blocks ignored;
-      missing or non-root parent gives null domain columns. A removed problem
-      keeps its mapping without acquiring a replacement subsection by position.
-      Current assignments to a stale Quiz subsection are withheld.
+    description: >-
+      The latest observation controls membership. Duplicate ObjectTag records enrich
+      a confirmed assignment once. Retired problems retain a historical row without
+      a current parent. Unrelated and stale ObjectTags cannot create assignments.
     model: int_pss_quiz_item_subdomain_map
     given:
-      - input: ref("int_pss_master_course_scope")
+      - input: ref("int_pss_quiz_problem_objectives")
         format: sql
         rows: |
-          select cast('course-v1:O+C+R' as Nullable(String)) as master_course
-      - input: ref("int_pss_quiz_taxonomy_scope")
-        format: sql
-        rows: |
-          select 'course-v1:O+C+R' as master_course, toInt32(30) as taxonomy_id
-          union all select 'course-v1:X+Y+Z', 20
+          with
+            (toUInt64(30),toUInt64(301),toUInt64(311),'Domain 1','1.1 Controls','D1','D1.1','["Domain 1", "1.1 Controls"]') as x,
+            (toUInt64(30),toUInt64(301),toUInt64(312),'Domain 1','1.2 Concepts','D1','D1.2','["Domain 1", "1.2 Concepts"]') as y,
+            (toUInt64(30),toUInt64(301),toUInt64(0),'Domain 1','','D1','','["Domain 1"]') as d
+          select 'course-v1:O+C+R' as master_course, concat('block-v1:O+C+R+type@problem+block@',problem) as problem_block_id,
+            concat('block-v1:O+C+R+type@sequential+block@',section) as subsection_block_id,
+            addDays(toDateTime64('2026-01-01',6,'UTC'),day) as observed_at,
+            toUUID('00000000-0000-0000-0000-000000000011') as capture_id, latest as is_latest_capture, 'observed' as mapping_status,
+            arrayMap(v -> multiIf(v=1,x,v=2,y,d), tags) as objectives
+          from values('problem String, section String, day Int32, latest UInt8, tags Array(UInt8)',
+            ('one','s1',1,1,[1]),('one','s1',30000,0,[]),('two','s1',1,1,[1,2]),('domonly','s1',1,1,[3]),('both','s1',1,1,[1]),
+            ('stale','stale',1,1,[1]),('untagged','s1',0,0,[1]),('untagged','s1',1,1,[]),
+            ('removed','s1',0,0,[2]))
       - input: ref("int_pss_quiz_item_structure_coverage")
         format: sql
         rows: |
@@ -46,16 +49,6 @@ unit_tests:
           union all select 14, 'block-v1:O+C+R+type@problem+block@removed', 30, 312
           union all select 15, 'block-v1:O+C+R+type@problem+block@deep', 30, 313
           union all select 16, 'block-v1:O+C+R+type@problem+block@stale', 30, 311
-      - input: ref("dim_most_recent_tags")
-        format: sql
-        rows: |
-          select toInt32(301) as id, toInt32(30) as taxonomy, toInt32(0) as parent, 'Domain 1' as value,
-              'D1' as external_id, '["Domain 1"]' as lineage
-          union all select 311, 30, 301, '1.1 Controls', 'D1.1', '["Domain 1", "1.1 Controls"]'
-          union all select 312, 30, 301, '1.2 Concepts', 'D1.2', '["Domain 1", "1.2 Concepts"]'
-          union all select 313, 30, 311, 'Deeper', 'D1.1.x', '["Domain 1", "1.1 Controls", "Deeper"]'
-          union all select 399, 30, 398, '9.9 Orphan', 'D9.9', '["Domain 9", "9.9 Orphan"]'
-          union all select 201, 20, 0, 'Apply', '', '["Apply"]'
       - input: ref("dim_course_blocks")
         format: sql
         rows: |
@@ -86,15 +79,12 @@ unit_tests:
             cast('1.1 Controls' as Nullable(String)) as subdomain_name,
             cast('D1.1' as Nullable(String)) as subdomain_external_id,
             cast('["Domain 1", "1.1 Controls"]' as Nullable(String)) as lineage,
-            toUInt64(1) as item_subdomain_count, toInt32(2) as object_tag_id
-        union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@problem+block@two', 'block-v1:O+C+R+type@sequential+block@s1', true, true, true, 30, 'Fixture objectives', 301, 'Domain 1', 'D1', 311, '1.1 Controls', 'D1.1', '["Domain 1", "1.1 Controls"]', 2, 3
-        union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@problem+block@two', 'block-v1:O+C+R+type@sequential+block@s1', true, true, true, 30, 'Fixture objectives', 301, 'Domain 1', 'D1', 312, '1.2 Concepts', 'D1.2', '["Domain 1", "1.2 Concepts"]', 2, 4
-        union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@problem+block@domonly', 'block-v1:O+C+R+type@sequential+block@s1', true, true, true, 30, 'Fixture objectives', 301, 'Domain 1', 'D1', null, null, null, '["Domain 1"]', 1, 5
-        union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@problem+block@both', 'block-v1:O+C+R+type@sequential+block@s1', true, true, true, 30, 'Fixture objectives', 301, 'Domain 1', 'D1', 311, '1.1 Controls', 'D1.1', '["Domain 1", "1.1 Controls"]', 1, 7
-        union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@problem+block@gone', null, false, false, false, 30, 'Fixture objectives', 301, 'Domain 1', 'D1', 311, '1.1 Controls', 'D1.1', '["Domain 1", "1.1 Controls"]', 1, 9
-        union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@problem+block@orphan', 'block-v1:O+C+R+type@sequential+block@s1', true, true, true, 30, 'Fixture objectives', null, null, null, 399, '9.9 Orphan', 'D9.9', '["Domain 9", "9.9 Orphan"]', 1, 12
-        union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@problem+block@removed', null, true, false, true, 30, 'Fixture objectives', 301, 'Domain 1', 'D1', 312, '1.2 Concepts', 'D1.2', '["Domain 1", "1.2 Concepts"]', 1, 14
-        union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@problem+block@deep', null, false, false, false, 30, 'Fixture objectives', null, null, null, 313, 'Deeper', 'D1.1.x', '["Domain 1", "1.1 Controls", "Deeper"]', 1, 15
+            toUInt64(1) as item_subdomain_count, toInt32(2) as object_tag_id, toDateTime64('2026-01-02',6,'UTC') as observed_at, toUUID('00000000-0000-0000-0000-000000000011') as capture_id, 'observed' as mapping_status
+        union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@problem+block@two', 'block-v1:O+C+R+type@sequential+block@s1', true, true, true, 30, 'Fixture objectives', 301, 'Domain 1', 'D1', 311, '1.1 Controls', 'D1.1', '["Domain 1", "1.1 Controls"]', 2, 3, toDateTime64('2026-01-02',6,'UTC'), toUUID('00000000-0000-0000-0000-000000000011'), 'observed'
+        union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@problem+block@two', 'block-v1:O+C+R+type@sequential+block@s1', true, true, true, 30, 'Fixture objectives', 301, 'Domain 1', 'D1', 312, '1.2 Concepts', 'D1.2', '["Domain 1", "1.2 Concepts"]', 2, 4, toDateTime64('2026-01-02',6,'UTC'), toUUID('00000000-0000-0000-0000-000000000011'), 'observed'
+        union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@problem+block@domonly', 'block-v1:O+C+R+type@sequential+block@s1', true, true, true, 30, 'Fixture objectives', 301, 'Domain 1', 'D1', null, null, null, '["Domain 1"]', 1, 5, toDateTime64('2026-01-02',6,'UTC'), toUUID('00000000-0000-0000-0000-000000000011'), 'observed'
+        union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@problem+block@both', 'block-v1:O+C+R+type@sequential+block@s1', true, true, true, 30, 'Fixture objectives', 301, 'Domain 1', 'D1', 311, '1.1 Controls', 'D1.1', '["Domain 1", "1.1 Controls"]', 1, 7, toDateTime64('2026-01-02',6,'UTC'), toUUID('00000000-0000-0000-0000-000000000011'), 'observed'
+        union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@problem+block@removed', null, true, false, true, 30, 'Fixture objectives', 301, 'Domain 1', 'D1', 312, '1.2 Concepts', 'D1.2', '["Domain 1", "1.2 Concepts"]', 1, 14, toDateTime64('2026-01-01',6,'UTC'), toUUID('00000000-0000-0000-0000-000000000011'), 'observed'
 
   - name: test_pss_quiz_item_subdomain_coverage
     model: int_pss_quiz_item_subdomain_coverage
@@ -120,6 +110,15 @@ unit_tests:
             ('A','ungraded','s','problem',0,1),('A','old','s','problem',1,0),
             ('A','launch','s','lti_consumer',1,1),('B','unconfigured','s','problem',1,1),
             ('D','valid','s','problem',1,1),('D','stale','stale','problem',1,1),('E','unclassified','s','problem',1,1))
+      - input: ref("int_pss_quiz_problem_objectives")
+        format: sql
+        rows: |
+          select master_course, problem_block_id, subsection_block_id, mapping_status, true as is_latest_capture,
+            arrayMap(i -> tuple(toUInt64(30),toUInt64(301),i), children) as objective_keys
+          from values('master_course String, problem_block_id String, subsection_block_id String, mapping_status String, children Array(UInt64)',
+            ('A','two','s','observed',[311,312]),('A','domain','s','observed',[0]),('A','untagged','s','observed',[]),
+            ('A','lab','lab','observed',[]),('D','valid','s','observed',[311]),('D','stale','stale','observed',[]),
+            ('E','unclassified','s','observed',[]))
       - input: ref("int_pss_quiz_item_structure_coverage")
         format: sql
         rows: |
@@ -130,11 +129,6 @@ unit_tests:
         rows: |
           select * from values('master_course String, inventory_status String', ('A','classified'),('B','classified'),
             ('C','no_graded_subsections'),('D','classified'),('E','partially_classified'),('F','structure_disagrees'))
-      - input: ref("int_pss_quiz_item_subdomain_map")
-        format: sql
-        rows: |
-          select * from values('master_course String, problem_block_id String, subdomain_tag_id Nullable(Int32)',
-            ('A','two',311),('A','two',312),('A','domain',NULL),('D','valid',311))
     expect:
       format: sql
       rows: |

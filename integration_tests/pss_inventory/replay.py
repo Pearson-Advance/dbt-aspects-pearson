@@ -185,6 +185,7 @@ def publish(
     replay_dump=None,
     source_only=False,
     quiz_problems=3,
+    problem_tags=None,
 ):
     dump_time = replay_dump or timestamp
     snapshot = f"{revision:024x}"
@@ -223,6 +224,8 @@ def publish(
     )
     if replay_dump or source_only:
         return
+    published_tags = {"one": [1, 2, 2, 3], "two": [1], "three": []}
+    published_tags.update(problem_tags or {})
     structure = [
         ("course", "course", 0, 0, 0, 0),
         ("chapter", "section", 1, 0, 0, 0),
@@ -248,7 +251,15 @@ def publish(
                 display_name=key,
                 xblock_data_json=json.dumps(
                     dict(
-                        section=section, subsection=sub, unit=unit, graded=bool(graded)
+                        section=section,
+                        subsection=sub,
+                        unit=unit,
+                        graded=bool(graded),
+                        **(
+                            {"tags": published_tags[key]}
+                            if kind == "problem" and published_tags[key] is not None
+                            else {}
+                        ),
                     )
                 ),
                 order=i,
@@ -262,8 +273,13 @@ def publish(
 
 
 def refresh_structure(f):
-    f.sql("SYSTEM REFRESH VIEW reporting.dim_course_blocks_mv")
-    f.sql("SYSTEM WAIT VIEW reporting.dim_course_blocks_mv")
+    for model in (
+        "dim_course_blocks",
+        "int_pss_course_tag_captures",
+        "int_pss_quiz_problem_objectives",
+    ):
+        f.sql(f"SYSTEM REFRESH VIEW reporting.{model}_mv")
+        f.sql(f"SYSTEM WAIT VIEW reporting.{model}_mv")
 
 
 def configure(f):
@@ -371,6 +387,7 @@ def exercise(f):
 
     configure(f)
     f.dbt("build", *selected, configured=True)
+    refresh_structure(f)
     f.expect(
         "two eligible classes with two ordered activities",
         f"SELECT ccx_id, groupArray(activity_type) FROM "
@@ -395,6 +412,99 @@ def exercise(f):
         "SELECT quiz_problem_count, quiz_problems_with_subdomain, quiz_problems_domain_only, "
         "quiz_problems_without_mapping" + item_coverage,
         "3\t1\t1\t1",
+    )
+
+    # ObjectTag rows still contain X and Y through all four exports.
+    item_map = (
+        "SELECT groupArray(subdomain_tag_id) FROM reporting.int_pss_quiz_item_subdomain_map "
+        f"WHERE problem_block_id='{block('problem', 'one')}' AND in_latest_publish"
+    )
+    publish(
+        f,
+        6,
+        "2026-11-01 11:00:00",
+        "Knowledge Check",
+        True,
+        problem_tags={"one": [1, 3]},
+    )
+    refresh_structure(f)
+    f.expect("removing one child leaves only Y", item_map, "[3]")
+    publish(
+        f, 7, "2026-11-01 11:15:00", "Knowledge Check", True, problem_tags={"one": []}
+    )
+    refresh_structure(f)
+    f.expect("explicit empty export clears the last assignment", item_map, "[]")
+    f.expect(
+        "confirmed untagged problems count once",
+        "SELECT quiz_problems_with_subdomain, quiz_problems_domain_only, quiz_problems_without_mapping"
+        + item_coverage,
+        "0\t1\t2",
+    )
+    publish(
+        f, 8, "2026-11-01 11:30:00", "Knowledge Check", True, problem_tags={"one": None}
+    )
+    refresh_structure(f)
+    f.expect(
+        "missing tags withhold mapping counts but preserve the known Quiz population",
+        "SELECT quiz_problem_count, isNull(tagged_graded_problem_count), isNull(quiz_problems_without_mapping)"
+        + item_coverage,
+        "3\t1\t1",
+    )
+    publish(
+        f,
+        9,
+        "2026-11-01 12:00:00",
+        "Knowledge Check",
+        True,
+        problem_tags={"one": [999]},
+    )
+    refresh_structure(f)
+    f.expect(
+        "a tag absent from the observed dictionary is unknown",
+        "SELECT mapping_status FROM reporting.int_pss_quiz_problem_objectives "
+        f"WHERE is_latest_capture AND problem_block_id='{block('problem', 'one')}'",
+        "tag_dictionary_unavailable",
+    )
+
+    dictionary_change = "2026-11-01 12:15:00"
+    f.insert(
+        "event_sink.tag",
+        [
+            dict(
+                id=4,
+                taxonomy=30,
+                parent=0,
+                value="Second domain",
+                external_id="D2",
+                lineage='["Second domain"]',
+                time_last_dumped=dictionary_change,
+            ),
+            dict(
+                id=3,
+                taxonomy=30,
+                parent=4,
+                value="Renamed Y",
+                external_id="Y2",
+                lineage='["Second domain", "Renamed Y"]',
+                time_last_dumped=dictionary_change,
+            ),
+        ],
+    )
+    publish(
+        f,
+        10,
+        "2026-11-01 12:30:00",
+        "Knowledge Check",
+        True,
+        problem_tags={"one": [4, 3]},
+    )
+    refresh_structure(f)
+    f.expect(
+        "the dictionary reparent affects only captures after it was observed",
+        "SELECT labels FROM reporting.int_pss_quiz_problem_objectives "
+        f"WHERE problem_block_id='{block('problem', 'one')}' AND observed_at IN "
+        "('2026-11-01 11:00:00','2026-11-01 12:30:00') ORDER BY observed_at",
+        "[(30,1,3,'Domain','Y')]\n[(30,4,3,'Second domain','Renamed Y')]",
     )
 
     # Studio has published a fourth problem. The Aspects structure refresh

@@ -37,6 +37,8 @@ models:
       - dbt_utils.unique_combination_of_columns:
           combination_of_columns: [ccx_id, source_result_id]
     columns:
+      - name: source_problem_usage_key
+        description: Original xAPI problem usage key, using the problem parent for a child evaluation. Available for matching an attested item after a later course move or removal.
       - name: statement_at
         description: Nullable UTC timestamp from the xAPI statement. The emission timestamp is retained separately.
       - name: earned_points

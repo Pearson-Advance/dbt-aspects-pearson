@@ -29,6 +29,26 @@ models:
           - accepted_values:
               values: [counts_match, missing_expected_count, missing_subsection, problem_count_mismatch]
 
+  - name: int_pss_quiz_problem_objectives
+    description: >-
+      One row per scoped master, observed course export time and problem in that export.
+      The tag and top-level parent dictionaries are read as of the export, using the
+      currently approved scope for that master. The persisted four-hour refresh waits
+      for int_pss_course_tag_captures_mv. A missing course/problem row provides no
+      mapping evidence. Consumers must check mapping_status before using objective_keys.
+      Empty objective_keys with observed status means the export had zero approved
+      assignments. Domain-only objectives use a zero child in the tuple. A parent
+      and its own children yield just the children. Unresolved parents may appear
+      as zero in diagnostic objectives but invalidate the observation for scoring.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [master_course, observed_at, problem_block_id]
+    columns:
+      - name: mapping_status
+        data_tests:
+          - accepted_values:
+              values: [observed, taxonomy_scope_unavailable, tag_dictionary_unavailable, ambiguous_capture, conflicting_payload, tags_unavailable]
+
   - name: int_pss_quiz_item_subdomain_map
     description: >
       One row per master problem and distinct approved taxonomy/domain/subdomain
@@ -62,7 +82,7 @@ models:
         data_tests:
           - not_null
       - name: in_course_structure
-        description: False for tags on blocks no longer in the course structure (stale tags).
+        description: False when the independently refreshed course structure has no matching problem.
       - name: in_latest_publish
         description: False for problems removed from the latest publish.
       - name: domain_tag_id
@@ -75,12 +95,19 @@ models:
         description: Null for a domain-only tag.
       - name: item_subdomain_count
         description: >
-          Rows for this item across every configured taxonomy, to split
-          credit (1/n) or deduplicate downstream.
+          Number of identifiable assignments in this item observation across the
+          configured taxonomies. Use it to allocate credit only with observed
+          mapping_status. Partial diagnostic rows may omit unresolved assignments.
         data_tests:
           - not_null
       - name: object_tag_id
-        description: Most recent ObjectTag id behind this row.
+        description: Optional latest matching ObjectTag ID for provenance. The course export establishes membership.
+      - name: mapping_status
+        description: Use observed for complete assignments. Known partial facts may be retained with tag_dictionary_unavailable for reconciliation.
+      - name: capture_id
+        description: Aspects export UUID that establishes this assignment.
+      - name: observed_at
+        description: UTC observation time of the course export that establishes this assignment.
 
   - name: int_pss_quiz_item_subdomain_coverage
     description: >
@@ -88,10 +115,10 @@ models:
       Quiz subsections. A problem with several tags counts once. The Quiz breakdown
       distinguishes child assignments, domain-only assignments and unmapped items.
       The tagged counts are NULL when the target has no approved taxonomy for the
-      run or an approved taxonomy is absent from the target dictionary. A zero
-      problem count describes observed rows; publication completeness
-      comes from the master catalog coverage. No ObjectTag tombstone feed exists
-      to certify tag removal or recover attempt-time mappings.
+      run, an approved taxonomy is absent, or any applicable problem lacks confirmed
+      membership and a usable dictionary in the latest course export. A genuine empty
+      tags array counts as an unmapped problem. A zero problem count describes
+      observed rows. Publication completeness comes from the master catalog coverage.
     columns:
       - name: quiz_structure_status
         description: >-

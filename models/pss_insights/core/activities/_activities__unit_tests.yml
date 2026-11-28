@@ -49,10 +49,6 @@ unit_tests:
           from values('n String, ver String, rule String, arr Array(String)',
             ('1','v2','inherit_master',[]),('1','v1','inherit_master',[]),
             ('2','v1','inherit_master',[]),('2','v2','include_subsection',['block-v1:O+C+R+type@sequential+block@l']))
-      - input: ref('int_pss_master_publication')
-        format: sql
-        rows: |
-          select 'course-v1:O+C+R' as master_course, 'observed' as publication_status
     expect:
       format: sql
       rows: |
@@ -72,7 +68,7 @@ unit_tests:
       - input: ref('int_pss_master_course_scope')
         format: sql
         rows: |
-          select * from values('master_course String', ('A'),('B'),('C'),('D'))
+          select * from values('master_course String', ('A'),('B'),('C'),('D'),('E'),('F'))
       - input: source('pss_event_sink','pss_subsection_assignment_types')
         format: sql
         rows: |
@@ -82,7 +78,9 @@ unit_tests:
              ('A','2026-11-10','2026-11-10',null,'new'),('B','2026-11-11','2026-11-11','2026-11-11','one'),
              ('B','2026-11-11','2026-11-11','2026-11-11','two'),
              ('C','2026-11-12','2026-11-12','2026-11-12','reused'),('C','2026-11-13','2026-11-13','2026-11-13','reused'),
-             ('D','2026-11-01','2026-11-01','2026-11-01','same'),('D','2026-11-01','2026-11-30',null,'same'))
+             ('D','2026-11-01','2026-11-01','2026-11-01','same'),('D','2026-11-01','2026-11-30',null,'same'),
+             ('E','','2026-11-15',null,'untimed'),('E','2026-11-14','2026-11-14','2026-11-14','timed'),
+             ('F','not a time','2026-11-15',null,'untimed'))
     expect:
       format: sql
       rows: |
@@ -90,11 +88,13 @@ unit_tests:
            parseDateTime64BestEffortOrNull(confirmed,6,'UTC') as head_confirmed_at, id as snapshot_id,
            cast([] as Array(Tuple(subsection_block_id String,section_order UInt32,subsection_order UInt32))) as subsections,
            status as snapshot_status, latest as is_latest
-        from values('master_course String, date String, confirmed Nullable(String), id String, status String, latest UInt8',
+        from values('master_course String, date Nullable(String), confirmed Nullable(String), id String, status String, latest UInt8',
           ('A','2026-11-01','2026-11-01','old','observed',0),('A','2026-11-10',null,'new','observed',1),
           ('B','2026-11-11','2026-11-11','','conflicting_publication',1),
           ('C','2026-11-12','2026-11-12','','conflicting_publication',0),('C','2026-11-13','2026-11-13','','conflicting_publication',1),
-          ('D','2026-11-01','2026-11-01','','conflicting_publication',1))
+          ('D','2026-11-01','2026-11-01','','conflicting_publication',1),
+          ('E',null,null,'','invalid_publication_time',0),('E','2026-11-14','2026-11-14','timed','observed',1),
+          ('F',null,null,'','invalid_publication_time',1))
 
   - name: test_pss_master_publication_requires_current_head_evidence
     model: int_pss_master_publication

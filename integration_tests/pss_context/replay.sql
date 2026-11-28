@@ -22,7 +22,7 @@ VALUES
 INSERT INTO event_sink.course_overviews (org, course_key, course_start, course_end, modified, time_last_dumped)
 VALUES
 ('EXAMPLE','course-v1:EXAMPLE+DEMO+RUN','2026-01-01','2026-12-31','2026-11-09','2026-11-09 08:00:01'),
-('PSS','ccx-v1:EXAMPLE+DEMO+RUN+ccx@101','2026-11-10','2026-11-12','2026-11-09','2026-11-09 08:00:01');
+('EXAMPLE','ccx-v1:EXAMPLE+DEMO+RUN+ccx@101','2026-11-10','2026-11-12','2026-11-09','2026-11-09 08:00:01');
 
 INSERT INTO event_sink.external_id (user_id, external_id_type, external_user_id, time_last_dumped)
 VALUES (1001,'xapi','ab000000-0000-4000-8000-000000000001','2026-11-09 08:00:01'),

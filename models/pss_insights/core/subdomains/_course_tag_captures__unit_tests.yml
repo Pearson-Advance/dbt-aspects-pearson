@@ -1,0 +1,56 @@
+unit_tests:
+  - name: test_pss_course_tag_capture_evidence
+    description: >
+      Validate complete problem observations, empty and malformed arrays, removed
+      blocks, duplicate/contradictory payloads and subsection placement. Tied or
+      reused dump IDs, undated exports and the default UUID cannot order a capture.
+    model: int_pss_course_tag_captures
+    given:
+      - input: ref('int_pss_master_course_scope')
+        format: sql
+        rows: |
+          select concat('course-v1:', org, '+C+R') as master_course
+          from values('org String', ('X'), ('Y'), ('Z'))
+      - input: source('event_sink', 'course_blocks')
+        format: sql
+        rows: |
+          select concat('course-v1:', org, '+C+R') as course_key,
+            if(day=0, 'undated', concat('2026-01-0',toString(day),' 11:00:00.123456+00:00')) as time_last_dumped,
+            toUUID(concat('00000000-0000-0000-0000-', leftPad(toString(id),12,'0'))) as dump_id,
+            concat('block-v1:',org,'+C+R+type@',kind,'+block@',item) as location,
+            concat('{"section":1,"subsection":1', if(tags='', '', concat(',"tags":',tags)), '}') as xblock_data_json
+          from values('org String, day UInt8, id UInt8, kind String, item String, tags String',
+            ('X',1,1,'sequential','quiz',''),
+            ('X',1,1,'problem','one','[3,2,2]'), ('X',1,1,'problem','one','[3,2,2]'),
+            ('X',1,1,'problem','missing',''), ('X',1,1,'problem','null','null'),
+            ('X',1,1,'problem','string','[2,"3"]'), ('X',1,1,'problem','negative','[-1]'),
+            ('X',1,1,'problem','overflow','[2147483648]'), ('X',1,1,'problem','float','[1.5]'),
+            ('X',1,1,'problem','conflict','[1]'), ('X',1,1,'problem','conflict','[]'),
+            ('X',2,2,'sequential','quiz',''), ('X',2,2,'sequential','other',''),
+            ('X',2,2,'problem','one','[]'), ('X',3,3,'course','course',''),
+            ('Y',1,1,'problem','one','[1]'), ('Y',2,1,'problem','one','[2]'),
+            ('Y',3,3,'problem','one','[3]'), ('Y',3,4,'course','course',''),
+            ('Y',4,0,'course','course',''), ('Z',0,1,'course','course',''),
+            ('Z',1,2,'problem','one','[]'), ('Outside',1,1,'problem','one','[9]'))
+    expect:
+      format: sql
+      rows: |
+        select concat('course-v1:', org, '+C+R') as master_course,
+          toDateTime64(concat('2026-01-0',toString(day),' 11:00:00.123456'),6,'UTC') as observed_at,
+          if(item='', '', concat('block-v1:',org,'+C+R+type@problem+block@',item)) as problem_block_id,
+          if(id=0, null, toUUID(concat('00000000-0000-0000-0000-',leftPad(toString(id),12,'0')))) as capture_id,
+          latest as is_latest_capture,
+          if(placed, concat('block-v1:',org,'+C+R+type@sequential+block@quiz'),null) as subsection_block_id,
+          status as capture_status, ids as tag_ids
+        from values('org String, day UInt8, item String, id UInt8, latest UInt8, placed UInt8, status String, ids Array(UInt64)',
+          ('X',1,'',1,0,0,'observed',[]), ('X',1,'one',1,0,1,'observed',[2,3]),
+          ('X',1,'missing',1,0,1,'tags_unavailable',[]), ('X',1,'null',1,0,1,'tags_unavailable',[]),
+          ('X',1,'string',1,0,1,'tags_unavailable',[]), ('X',1,'negative',1,0,1,'tags_unavailable',[]),
+          ('X',1,'overflow',1,0,1,'tags_unavailable',[]), ('X',1,'float',1,0,1,'tags_unavailable',[]),
+          ('X',1,'conflict',1,0,0,'conflicting_payload',[]),
+          ('X',2,'',2,0,0,'observed',[]), ('X',2,'one',2,0,0,'observed',[]), ('X',3,'',3,1,0,'observed',[]),
+          ('Y',1,'',0,0,0,'ambiguous_capture',[]), ('Y',1,'one',0,0,0,'ambiguous_capture',[]),
+          ('Y',2,'',0,0,0,'ambiguous_capture',[]), ('Y',2,'one',0,0,0,'ambiguous_capture',[]),
+          ('Y',3,'',0,0,0,'ambiguous_capture',[]), ('Y',3,'one',0,0,0,'ambiguous_capture',[]),
+          ('Y',4,'',0,1,0,'ambiguous_capture',[]),
+          ('Z',1,'',0,1,0,'ambiguous_capture',[]), ('Z',1,'one',0,1,0,'ambiguous_capture',[]))

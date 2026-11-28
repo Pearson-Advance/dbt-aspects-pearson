@@ -154,7 +154,13 @@ def publication(f, *, revision=1, published_at=T1, quiz_assignment="Quiz", lab_l
                 location=block(kind, key),
                 display_name=key,
                 xblock_data_json=json.dumps(
-                    dict(section=section, subsection=sub, unit=unit, graded=sub > 0)
+                    dict(
+                        section=section,
+                        subsection=sub,
+                        unit=unit,
+                        graded=sub > 0,
+                        tags={"one": [1, 2, 3], "two": [1]}.get(key, []),
+                    )
                 ),
                 order=order,
                 edited_on=published_at,

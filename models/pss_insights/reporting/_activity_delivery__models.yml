@@ -1,0 +1,58 @@
+version: 2
+
+models:
+  - name: int_pss_class_catalog_coverage
+    description: >
+      One current CCX publication from the activity inventory and its class context roster coverage per eligible class.
+      Classified and verified-empty inventories have exact totals. Partly classified inventories
+      retain the known count. Missing or disputed publications/applicability are unavailable.
+    columns:
+      - name: ccx_id
+        data_tests: [not_null, unique]
+      - name: catalog_status
+        data_tests:
+          - accepted_values:
+              values: ["complete", "incomplete", "unavailable"]
+      - name: known_published_activities
+        description: Number of recognized applicable activities in the same publication.
+      - name: registered_actor_denominator
+        description: Exact registered count from the class context. Missing or incomplete roster evidence leaves NULL.
+
+  - name: rpt_pss_class_activity_delivery
+    description: >
+      One row per eligible CCX and applicable current published master subsection, including
+      activities with no sitting. The snapshot counts distinct registered actors with positive
+      score model participation. pss_class_activity_delivery(start, end, authorized_classes)
+      recomputes participation and the observed attempt mean for UTC [start,end). It uses current
+      roster and publication and retains current-score difficulty.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: ["ccx_id", "subsection_block_id"]
+      - dbt_utils.expression_is_true:
+          expression: "isNull(registered_learners) = 0 or (isNull(delivery_complete) and isNull(attempted_learners))"
+    columns:
+      - name: ccx_id
+        data_tests: [not_null]
+      - name: subsection_block_id
+        data_tests: [not_null]
+      - name: activity_sequence
+        description: Current activity inventory course order for Quiz and Lab difficulty.
+        data_tests: [not_null]
+      - name: registered_learners
+        description: Exact class context registered count, NULL for an unreconciled population.
+      - name: observed_registered_learners
+        description: Resolved registered actors observed in the source.
+      - name: observed_attempted_learners
+        description: Distinct registered learners with positively qualified whole-activity participation in scope.
+      - name: attempted_learners
+        description: Exact coverage or all reconciled registered learners observed. Otherwise NULL.
+      - name: participation_status
+        description: Verified, unverified telemetry or roster, unresolved attempts, or invalid window.
+      - name: telemetry_complete
+        description: A current independent claim covers the same institution, CCX, activity and publication, with resolved eligible evidence.
+      - name: delivery_complete
+        description: Every registered learner participated. NULL for an empty roster or unresolved result.
+      - name: avg_score_pct
+        description: Current mean of available learner/activity scores from the score models on 0–100.
+      - name: avg_attempt_score_pct
+        description: Equal-weight mean of available qualifying whole-attempt scores on 0–100, filtered by start time for a selected period.

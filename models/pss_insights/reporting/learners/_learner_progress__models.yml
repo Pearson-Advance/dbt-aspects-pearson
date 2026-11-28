@@ -1,0 +1,90 @@
+version: 2
+
+models:
+  - name: int_pss_lms_course_grades
+    description: >-
+      Current LMS grade per CCX and actor, from the earned course-object statement emitted by
+      edx.grades.course.grade_calculated. Use the explicit scaled fraction on 0–1. A missing field,
+      invalid fraction, conflicting statement identity or conflicting grade at the latest time
+      leaves the grade NULL. Replayed older statements keep their original timestamp.
+      Enrollment pass/fail transitions do not carry the LMS-calculated course grade.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [ccx_id, actor_id]
+    columns:
+      - name: course_grade
+        data_tests:
+          - dbt_utils.accepted_range: {min_value: 0, max_value: 1}
+
+  - name: int_pss_learner_attempt_summary
+    description: >
+      Observed qualifying Final Exam and eligible practice-mode attempts per CCX and actor.
+      Each score model input row represents one distinct attempt. The native final uses its
+      configured mark. MeasureUp uses the attempt's test-version cut score. A missing
+      threshold, missing/invalid score, unsupported provider/rule or disagreement with a
+      recorded MeasureUp pass flag leaves the attempt unresolved. The learner remains in
+      the attempted population. An absent MeasureUp flag permits use of the exam threshold.
+
+  - name: int_pss_learner_navigation
+    description: >
+      Current registered class membership and distinct visits to applicable published units.
+      Use the latest CCX block structure if present, otherwise the master tree under a
+      reviewed class applicability rule. Restrict explicit subsection overrides to the
+      selected parents. Visits must come from the exact class and match the master or
+      class form of the same unit key. Verify the unit inventory and navigation feed
+      for that class/publication before certifying the ratio. Repeated visits and
+      historical units do not add to the numerator.
+
+  - name: rpt_pss_learner_progress
+    description: >
+      One row per currently registered (ccx_id, actor_id) with its institution and
+      master course. An atomic four-hour replacement refresh reads the LMS grade,
+      navigation, current scores and distinct attempts from the score models, and
+      readiness. Authorize classes before grouping learners across them.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [ccx_id, actor_id]
+    columns:
+      - name: ccx_id
+        data_tests: [not_null]
+      - name: actor_id
+        data_tests: [not_null]
+      - name: course_grade
+        description: Latest LMS course-grade fraction. Missing grades or differing grades tied at the latest timestamp stay null.
+      - name: content_progress
+        description: Distinct visited published units divided by published units, from zero to one. Null without verified coverage or a positive denominator.
+      - name: published_unit_count
+        description: Distinct units in the applicable current class structure. An explicitly empty class curriculum has zero. An unavailable unit inventory has NULL.
+      - name: observed_visited_unit_count
+        description: Distinct registered-learner visits to those units observed in this class, including when coverage remains unverified.
+      - name: visited_unit_count
+        description: Observed distinct units when coverage is verified. A registered learner with no visits then has zero.
+      - name: readiness_score
+        description: Readiness nullable fraction on 0–1 for this institution, CCX and registered actor.
+      - name: readiness_status
+        description: Readiness band. Unavailable readiness remains null.
+      - name: readiness_unavailable_reason
+        description: Readiness coverage reason, or readiness_unavailable when the input supplies none.
+      - name: qualifying_final_attempts
+        description: Observed qualifying Final Exam attempts, including attempts with an unresolved pass result.
+      - name: final_unresolved_attempts
+        description: Observed qualifying Final Exam attempts with insufficient or conflicting pass evidence.
+      - name: final_eligibility_unknown_attempts
+        description: Linked source sittings that may qualify as finals but lack a resolved historical type or eligibility rule. These withhold an otherwise unsupported zero or failure.
+      - name: final_history_complete
+        description: Current class-history attestation covers this actor and no unresolved candidate final has failed linkage for this actor. Separate counts flag linked attempts with uncertain eligibility or pass outcome.
+      - name: final_attempted
+        description: One for an observed qualifying Final Exam attempt, zero for none with verified coverage, otherwise null.
+      - name: final_passed
+        description: >
+          Provisional any-pass rule. One established pass suffices. Zero requires all
+          qualifying attempts to have known failing outcomes and verified coverage.
+          Null for no attempts or when the available evidence cannot establish an outcome.
+      - name: quiz_score_sum
+        description: Sum of available current Quiz score fractions across activities. Divide by quiz_score_count to obtain their mean.
+      - name: lab_score_sum
+        description: Sum of available current Lab score fractions across activities, paired with lab_score_count.
+      - name: practice_score_sum
+        description: Sum of available eligible Practice Exam attempt score fractions, paired with practice_score_count.
+      - name: final_score_sum
+        description: Sum of available qualifying Final Exam attempt score fractions, paired with final_score_count.
