@@ -1,0 +1,160 @@
+unit_tests:
+  - name: test_pss_practice_result_ancestry_policy_and_eligibility
+    model: int_pss_practice_item_counts
+    overrides:
+      vars:
+        pss_practice_item_rules:
+          "course-v1:O+C+scored": scored_only
+          "course-v1:O+C+all": all_exported
+    given:
+      - input: ref('rpt_pss_activity_attempts')
+        format: sql
+        rows: |
+          select *, 'measureup' as provider, 'i' as institution_id,
+            concat('course-v1:O+C+', policy) as master_course, 'c' as ccx_id, 'L' as actor_id,
+            'sub' as subsection_block_id, exam_attempt_id as attempt_key, 'v' as exam_test_id,
+            toDateTime64('2026-01-01 00:00:00',6,'UTC') as attempted_at, if(exam_attempt_id='9','version_pairing_unconfirmed','verified') as version_status
+          from values('exam_attempt_id String, activity_type String, is_eligible_practice Nullable(UInt8), is_finished UInt8, policy String',
+            ('1','Practice Exam',1,1,'pending'), ('2','Practice Exam',1,1,'scored'), ('3','Practice Exam',1,1,'all'),
+            ('4','Practice Exam',1,0,'pending'), ('5','Practice Exam',1,1,'pending'),
+            ('6','Practice Exam',0,1,'pending'), ('7','Final Exam',0,1,'pending'), ('8','Practice Exam',null,1,'pending'),
+            ('9','Practice Exam',1,1,'pending'), ('10','Practice Exam',1,1,'pending'))
+      - input: ref('int_measureup_exam_attempt_domain_current')
+        format: sql
+        rows: |
+          select toString(number) as source_id, source_id as exam_attempt_id, 'd' as exam_domain_id from numbers(1,9)
+      - input: ref('int_measureup_exam_attempt_subdomain_current')
+        format: sql
+        rows: |
+          select toString(number) as source_id, source_id as attempt_domain_id, 's' as exam_subdomain_id from numbers(1,9)
+      - input: ref('int_pss_practice_question_evidence')
+        format: sql
+        rows: |
+          select *, source_result_id as question_id, attempt_key as source_subdomain_attempt_id,
+            toFloat64OrNull(source_score) as provider_score
+          from values('attempt_key String, source_result_id String, source_score Nullable(String), provider_status String, source_result_count UInt64, linkage_status String, item_catalog_status String',
+            ('1','full','1','answered',1,'linked','verified'), ('1','wrong','0','answered',1,'linked','verified'),
+            ('1','skipped','0','skipped',1,'linked','verified'), ('1','no-status','1','',1,'linked','verified'), ('1','no-tag','1','answered',1,'linked','unavailable'), ('1','partial','.5','answered',1,'linked','verified'),
+            ('1','duplicate','1','answered',2,'linked','verified'), ('1','conflict','0','answered',1,'item_catalog_conflict','conflicting'),
+            ('2','skip',null,'unanswered',1,'linked','verified'), ('2','not-full','.5','answered',1,'linked','verified'),
+            ('3','blank',null,'unanswered',1,'linked','verified'), ('3','out-of-range','75','answered',1,'linked','verified'),
+            ('3','inconsistent','1','unanswered',1,'linked','verified'), ('3','bad','oops','answered',1,'linked','verified'),
+            ('4','unfinished','1','answered',1,'linked','verified'), ('9','unconfirmed','1','answered',1,'linked','verified'))
+      - input: ref('int_measureup_exam_domain_current')
+        format: sql
+        rows: select 'd' as source_id, 'D' as name, 'v' as exam_test_id
+      - input: ref('int_measureup_exam_subdomain_current')
+        format: sql
+        rows: select 's' as source_id, 'S' as name, 'd' as exam_domain_id
+    expect:
+      format: sql
+      rows: |
+        select 'i' as institution_id, concat('course-v1:O+C+', multiIf(attempt_key='2','scored',attempt_key='3','all','pending')) as master_course,
+          'c' as ccx_id, 'L' as actor_id, 'sub' as subsection_block_id, attempt_key, attempt_key as exam_attempt_id,
+          'v' as exam_test_id, toDateTime64('2026-01-01 00:00:00',6,'UTC') as attempted_at,
+          if(attempt_key='9','version_pairing_unconfirmed','verified') as version_status,
+          multiIf(attempt_key='2','scored_only',attempt_key='3','all_exported','binary_only') as item_rule,
+          item_id as result_id, item_id, if(mapped,'D',null) as objective_domain_name, if(mapped,'S',null) as objective_subdomain_name,
+          if(mapped,'d',null) as domain_id, if(mapped,'s',null) as subdomain_id, item_outcome
+        from values('attempt_key String, item_id Nullable(String), mapped UInt8, item_outcome String',
+          ('1','full',1,'correct'),('1','wrong',1,'incorrect'),('1','no-tag',0,'correct'),
+          ('1','skipped',1,'unresolved_item'), ('1','no-status',1,'unresolved_item'),('1','partial',1,'item_policy_required'),('1','duplicate',1,'unresolved_item'),('1','conflict',0,'unresolved_item'),
+          ('2','skip',1,'excluded'),('2','not-full',1,'incorrect'),('3','blank',1,'incorrect'),
+          ('3','out-of-range',1,'invalid_score'),('3','inconsistent',1,'invalid_score'),('3','bad',1,'invalid_score'),
+          ('4','unfinished',1,'item_policy_required'),('5',null,1,'missing_item_evidence'),('9','unconfirmed',0,'correct'),
+          ('10',null,0,'missing_item_evidence'))
+
+  - name: test_pss_practice_attempt_counts_include_unattributed_items_and_withhold_incomplete_sittings
+    model: int_pss_practice_attempt_totals
+    given:
+      - input: ref('rpt_pss_practice_subdomain_results')
+        format: sql
+        rows: |
+          select *, 'i' as institution_id, 'm' as master_course, 'c' as ccx_id, 'L' as actor_id,
+            'sub' as subsection_block_id, attempt_key as exam_attempt_id, 'test' as exam_test_id,
+            toDateTime64('2026-01-01 00:00:00',6,'UTC') as attempted_at, 'verified' as version_status
+          from values('attempt_key String, subdomain_id Nullable(String), observed_correct_items UInt64, observed_total_items UInt64, empty_branches UInt64, invalid_items UInt64, disputed_items UInt64',
+            ('mapped-and-unmapped','A',1,2,0,0,0), ('mapped-and-unmapped',null,2,3,0,0,0),
+            ('with-empty','A',1,2,0,0,0), ('with-empty',null,0,0,1,0,0),
+            ('duplicate','B',0,1,0,1,0), ('disputed','C',0,1,0,0,1),
+            ('all-excluded','D',0,0,0,0,0), ('true-zero','D',0,1,0,0,0))
+    expect:
+      format: sql
+      rows: |
+        select 'i' as institution_id, 'm' as master_course, 'c' as ccx_id, 'L' as actor_id,
+          'sub' as subsection_block_id, attempt_key, attempt_key as exam_attempt_id, 'test' as exam_test_id,
+          toDateTime64('2026-01-01 00:00:00',6,'UTC') as attempted_at, 'verified' as version_status,
+          coverage_status, correct_items, total_items
+        from values('attempt_key String, coverage_status String, correct_items Nullable(UInt64), total_items Nullable(UInt64)',
+          ('mapped-and-unmapped','counted',3,5),('with-empty','missing_item_evidence',null,null),
+          ('duplicate','unresolved_items',null,null),('disputed','item_policy_required',null,null),
+          ('all-excluded','zero_eligible_items',null,null),('true-zero','counted',0,1))
+
+  - name: test_pss_pooled_weakness_ranking_preserves_scope_and_unknowns
+    model: rpt_pss_learner_practice_weaknesses_current
+    given:
+      - input: ref('int_pss_class_scope')
+        format: sql
+        rows: select 'i' as institution_id, 'c' as ccx_id, 'm' as master_course
+      - input: ref('int_pss_learner_class_context')
+        format: sql
+        rows: |
+          select 'c' as ccx_id, actor_id, is_registered from values('actor_id String, is_registered UInt8',
+            ('L',1),('excluded',1),('unmapped',1),('unknown',1),('deactivated',0))
+      - input: ref('rpt_pss_activity_attempts')
+        format: sql
+        rows: |
+          select 'c' as ccx_id, 'i' as institution_id, 'unknown' as actor_id, 'measureup' as provider,
+            'Practice Exam' as activity_type, cast(null as Nullable(UInt8)) as is_eligible_practice
+      - input: ref('rpt_pss_practice_subdomain_results')
+        format: sql
+        rows: |
+          select *, 'i' as institution_id, if(subdomain_id is null,null,'1') as domain_id,
+            if(subdomain_id is null,null,'Shared name') as subdomain_name,
+            'counted' as coverage_status, if(subdomain_id is null,'objective_unavailable','verified') as mapping_status
+          from values('ccx_id String, actor_id String, subdomain_id Nullable(String), correct_items UInt64, total_items UInt64',
+            ('c','L','2',1,5),('c','L','2',0,5),('c','L','8',2,5),('c','L','10',2,5),
+            ('c','L','11',3,5),('c','L','12',7,10),('outside','L','2',20,20),
+            ('c','excluded','2',0,0),('c','unmapped',null,0,1),('c','unmapped','2',0,5))
+    expect:
+      format: sql
+      rows: |
+        select 'i' as institution_id, 'm' as master_course, 'c' as ccx_id, actor_id, ranking_status,
+          if(actor_id='L',
+              [tuple('1','2',toNullable('Shared name'),toUInt64(1),toUInt64(10),0.1),
+               tuple('1','8',toNullable('Shared name'),toUInt64(2),toUInt64(5),0.4),
+               tuple('1','10',toNullable('Shared name'),toUInt64(2),toUInt64(5),0.4)], []) as top_weaknesses
+        from values('actor_id String, ranking_status String',('L','ranked'),('excluded','zero_eligible_items'),
+          ('unmapped','item_or_mapping_unavailable'),('unknown','eligibility_unavailable'))
+
+  - name: test_pss_practice_unassigned_item_preserves_counts_but_withholds_affected_objective
+    model: rpt_pss_practice_subdomain_results
+    given:
+      - input: ref('int_pss_practice_item_counts')
+        format: sql
+        rows: |
+          select *, 'i' as institution_id, 'm' as master_course, 'c' as ccx_id, 'L' as actor_id,
+            'sub' as subsection_block_id, attempt_key as exam_attempt_id, 'v' as exam_test_id,
+            toDateTime64('2026-01-01 00:00:00',6,'UTC') as attempted_at, 'verified' as version_status,
+            if(subdomain_id is null,null,'D') as domain_id, domain_id as objective_domain_name,
+            subdomain_id as objective_subdomain_name, 'scored_only' as item_rule
+          from values('attempt_key String, subdomain_id Nullable(String), item_outcome String',
+            ('ambiguous','A','incorrect'),('ambiguous',null,'correct'),
+            ('excluded','A','incorrect'),('excluded',null,'excluded'))
+    expect:
+      format: sql
+      rows: |
+        select 'i' as institution_id, 'm' as master_course, 'c' as ccx_id, 'L' as actor_id,
+          'sub' as subsection_block_id, 'measureup' as provider, attempt_key, attempt_key as exam_attempt_id,
+          'v' as exam_test_id, 'verified' as version_status, toDateTime64('2026-01-01 00:00:00',6,'UTC') as attempted_at,
+          if(subdomain_id is null,null,'D') as domain_id, subdomain_id, domain_id as domain_name,
+          subdomain_id as subdomain_name, 'scored_only' as item_rule, observed_correct_items, observed_total_items,
+          toUInt64(observed_total_items=0) as excluded_items, toUInt64(0) as empty_branches, toUInt64(0) as invalid_items,
+          toUInt64(0) as disputed_items, 'counted' as item_coverage_status, toUInt64(attempt_key='ambiguous') as unassigned_buckets,
+          coverage_status, correct_items, total_items, subdomain_score, subdomain_score < 0.70 as is_weak,
+          if(subdomain_id is null,'objective_unavailable','verified') as mapping_status
+        from values('attempt_key String, subdomain_id Nullable(String), observed_correct_items UInt64, observed_total_items UInt64,
+          coverage_status String, correct_items Nullable(UInt64), total_items Nullable(UInt64), subdomain_score Nullable(Float64)',
+          ('ambiguous','A',0,1,'incomplete_item_mapping',null,null,null),
+          ('ambiguous',null,1,1,'counted',1,1,null),('excluded','A',0,1,'counted',0,1,0),
+          ('excluded',null,0,0,'counted',0,0,null))

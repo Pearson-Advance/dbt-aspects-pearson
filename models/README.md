@@ -6,6 +6,7 @@ Keep Pearson-owned transformations separated by business domain:
 - `measureup/`: MeasureUp test catalog, attempts, domains, subdomains, and question hierarchy.
 - [`pss_insights/core/`](pss_insights/core/README.md): published Studio activities, class applicability, grading policies and Quiz item objectives.
 - [`pss_insights/scores/`](pss_insights/scores/README.md) provides learner scores, whole-activity attempts, Quiz-item evidence and reporting-period coverage.
+- [`pss_insights/readiness/`](pss_insights/readiness/README.md) provides learner readiness, complete Quiz and practice objective results, and ranked practice weaknesses.
 - [`pss_insights/context/`](pss_insights/context/README.md): PSS class population, learner rosters and principal-to-class access.
 - `shared/`: reusable intermediate models that are genuinely shared by more than one domain.
 

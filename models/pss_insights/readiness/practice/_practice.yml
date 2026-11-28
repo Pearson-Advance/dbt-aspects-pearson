@@ -1,0 +1,68 @@
+version: 2
+
+models:
+  - name: int_pss_practice_question_evidence
+    description: Restricted current MeasureUp result PKs, including raw provider scores, link status, multiplicity, and the independent catalog and result ancestry checks shared with the score models.
+  - name: int_pss_practice_item_counts
+    description: >-
+      Restricted item-decision inputs per eligible Practice Exam and surviving provider result,
+      with placeholders for observed empty attempt branches. The default binary_only requires
+      a finished sitting, a resolved source result, answered status and a scored binary item. Unrecognized provider item statuses require review. Product/provider owners
+      may configure pss_practice_item_rules per exact master. all_exported counts unanswered or
+      unscored as incorrect; scored_only excludes those rows. Both treat valid fractional scores
+      below one as incorrect. Values outside the confirmed binary/fractional scale are unresolved.
+      Incomplete eligible sittings require an explicit rule. The upstream score eligibility
+      rule confirms the admitted activity type, flow state and practice mode for this master.
+  - name: rpt_pss_practice_subdomain_results
+    description: >-
+      One eligible practice-mode MeasureUp sitting per provider domain and subdomain pair. The
+      nullable objective bucket retains unattributed counts and observed holes in a branch. Counts
+      describe the current exported questions of each eligible sitting. An unobserved provider row
+      or entirely missing source revision needs independent reconciliation. Results are retained for
+      every score, including 70% and above. is_weak is defined for an available mapped score strictly
+      below 0.70. A sitting with unattributed eligible evidence retains its observed counts but
+      withholds any objective ratio that the unresolved mapping could change. Physical four-hour replacement follows the verified attempts refresh.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [attempt_key, domain_id, subdomain_id]
+      - dbt_utils.expression_is_true:
+          expression: "isNull(correct_items)=isNull(total_items) and (correct_items is null or correct_items<=total_items)"
+    columns:
+      - name: correct_items
+        description: Nullable UInt64 full-credit items under the applicable denominator policy. score=1 is the MeasureUp reporting convention.
+      - name: total_items
+        description: Nullable UInt64 eligible provider questions under the applicable denominator policy.
+      - name: subdomain_score
+        description: Nullable Float64 ratio of correct to total eligible items. An empty denominator has no score.
+      - name: mapping_status
+        description: Verified persisted attempt-version pairing and catalog ancestry, or objective_unavailable when either is unresolved. Distinct provider PKs across versions remain distinct even when display names coincide.
+      - name: coverage_status
+        data_tests:
+          - accepted_values:
+              values: [counted, missing_item_evidence, unresolved_items, item_policy_required, incomplete_item_mapping]
+  - name: int_pss_practice_attempt_totals
+    description: >-
+      One source-qualified eligible Practice Exam. Pools correct and total over all objective
+      buckets, including unassigned items. Missing branches, disputed items, and zero eligible
+      denominators leave the whole-attempt counts NULL for readiness.
+    columns:
+      - name: attempt_key
+        data_tests: [unique, not_null]
+      - name: coverage_status
+        data_tests:
+          - accepted_values:
+              values: [counted, missing_item_evidence, unresolved_items, item_policy_required, zero_eligible_items]
+  - name: rpt_pss_learner_practice_weaknesses_current
+    description: >-
+      One registered learner per eligible CCX. Pool eligible correct/total by provider domain and
+      subdomain PK across all known practice sittings. top_weaknesses contains at most three tuples
+      (domain_id, subdomain_id, subdomain_name, correct_items, total_items, pooled_score).
+      Order by unrounded ascending score, numeric subdomain PK, then raw subdomain/domain IDs.
+      An unresolved eligible item, mapping or relevant eligibility keeps the ranking unavailable.
+      Current no_observed_practice does not attest all-time source coverage. Bounded rankings
+      require continuous certification for the learner or every applicable practice activity and an eligible sitting finished within the selected interval before its score can be used. The verified latest publication must already apply at the start of that interval.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [ccx_id, actor_id]
+      - dbt_utils.expression_is_true:
+          expression: "length(top_weaknesses)<=3 and (ranking_status='ranked' or empty(top_weaknesses))"

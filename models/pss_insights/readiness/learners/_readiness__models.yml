@@ -1,0 +1,51 @@
+version: 2
+seeds:
+  - name: pss_readiness_history_coverage
+    description: >-
+      Optional independent reconciliation for one institution, CCX, registered actor, current publication and activity type.
+      A pair of blank bounds attests all observed eligible history with ongoing reconciliation until valid_until;
+      finite bounds certify UTC [start,end). Retract invalidated evidence immediately. Rows require provenance.
+    config:
+      tags: [pss_readiness]
+      column_types:
+        institution_id: String
+        ccx_id: String
+        actor_id: String
+        snapshot_id: String
+        activity_type: String
+        coverage_start: String
+        coverage_end: String
+        verified_at: String
+        valid_until: String
+        evidence_ref: String
+models:
+  - name: int_pss_readiness_history_coverage
+    description: Valid independently reconciled learner, activity-type and publication intervals for readiness.
+  - name: int_pss_readiness_evidence
+    description: >-
+      One linked sitting or one current Quiz/Lab activity-score observation per learner and CCX.
+      Dates and flags preserve what can be reconstructed. A native grade alone does not verify a sitting.
+      Practice item totals come from the canonical practice attempt, including its item-coverage decision.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [ccx_id, actor_id, evidence_kind, source_key]
+  - name: rpt_pss_learner_readiness_current
+    description: >-
+      One row per registered learner and eligible CCX, using the current roster and approved course policy.
+      The readiness fraction is the weighted mean across eligible attempted Quiz, Lab and Practice Exam types.
+      Per-type scores are fractions. Weight is the course percentage. Sitting and activity counts describe
+      observations. Type statuses identify the omitted or unresolved contribution. The practice numerator
+      and denominator reflect observed scored items, including when another sitting has incomplete coverage.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [ccx_id, actor_id]
+      - dbt_utils.expression_is_true:
+          expression: "isNull(readiness_score) = isNull(readiness_status) and isNull(readiness_score) = isNotNull(readiness_unavailable_reason)"
+    columns:
+      - name: readiness_score
+        description: Nullable Float64 fraction in [0,1]. The band uses the unrounded weighted evidence.
+        data_tests:
+          - dbt_utils.accepted_range: {min_value: 0, max_value: 1}
+      - name: readiness_status
+        data_tests:
+          - accepted_values: {values: ['On Target', 'Borderline', 'At Risk']}
