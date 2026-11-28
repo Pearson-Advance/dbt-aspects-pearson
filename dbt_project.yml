@@ -30,6 +30,8 @@ models:
     pss_insights:
       scores:
         +tags: ["pss_scores"]
+      readiness:
+        +tags: ["pss_readiness"]
 
 seeds:
   dbt_aspects_pearson:

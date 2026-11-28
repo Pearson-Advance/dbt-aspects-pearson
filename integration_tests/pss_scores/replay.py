@@ -35,7 +35,7 @@ from sources import (
 
 
 class Fixture(inventory.Fixture):
-    def dbt(self, command, *flags, quiz_score_rule=None):
+    def dbt(self, command, *flags, quiz_score_rule=None, extra_vars=None):
         variables = {
             "pss_quiz_taxonomies_by_master": {MASTER: [30]},
             "pss_roster_reconciled_until_utc": "2099-01-01 00:00:00",
@@ -44,6 +44,7 @@ class Fixture(inventory.Fixture):
         }
         if quiz_score_rule:
             variables["pss_current_score_rules"] = {MASTER: {"Quiz": quiz_score_rule}}
+        variables.update(extra_vars or {})
         subprocess.run(
             [
                 "dbt",

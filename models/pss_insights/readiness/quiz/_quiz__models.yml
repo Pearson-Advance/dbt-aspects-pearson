@@ -1,0 +1,87 @@
+version: 2
+
+models:
+  - name: int_pss_native_quiz_context
+    description: >-
+      Optional restricted adapter selected by pss_native_quiz_context_model.
+      The default produces zero typed rows. Each supplied row must attest a selected
+      native xAPI statement representing the eligible item result within one whole-Quiz sitting and its applicable
+      objective set. The data owner must reconcile the full set of eligible scored
+      items in the sitting, record distinct selected source results and withdraw
+      outdated evidence on correction. Inputs use String keys (ccx_id, actor_id,
+      source_result_id, namespaced attempt_key, subsection_block_id, problem_block_id,
+      snapshot_id), DateTime64(6, 'UTC') attempted_at, and String evidence_ref and
+      mapping_ref. Objectives are Array(Tuple(UInt64, UInt64, UInt64)) containing
+      Studio taxonomy, domain and subdomain PKs, with 0 for a domain-only subdomain.
+      A nonempty mapping_ref with an empty list certifies that the item had no
+      eligible tags. Supply evidence references to auditable records and refresh
+      the adapter before dependent reports when its source changes.
+
+  - name: int_pss_native_quiz_item_attribution
+    description: >-
+      Restricted diagnostics per in-scope native Quiz statement or missing selected result claimed by the adapter. Checks the registered
+      actor, item, applicable published Quiz, sitting identity and separately attested
+      assignments at attempt time against the current taxonomy IDs. A current tag
+      list alone cannot establish a historical mapping. Replayed identical claims
+      collapse. Conflicting sources cannot split an item across two sittings.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [ccx_id, source_result_id]
+    columns:
+      - name: link_status
+        data_tests:
+          - accepted_values:
+              values: [linked, source_result_unavailable, whole_sitting_key_unavailable, source_identity_unverified, conflicting_sitting_context, item_link_unverified, publication_unverified]
+
+  - name: int_pss_quiz_objective_items
+    description: >-
+      Restricted item allocations and coverage markers for an attributable Quiz
+      sitting. The score models retain unlinked provider question results and native
+      statements in their restricted evidence tables. The rule map is keyed by
+      exact master course and provider in pss_quiz_weakness_rules. MeasureUp
+      binary_0_1 requires answered and exactly 0 or 1 for each selected item.
+      Native equal_points divides both earned and possible points among distinct
+      eligible objectives, removing redundant parents within a domain. Scores never
+      cross providers, taxonomy versions or master courses.
+
+  - name: rpt_pss_quiz_subdomain_results
+    description: >-
+      One row per institution, CCX, registered actor, provider, whole Quiz sitting
+      and taxonomy/domain/subdomain. Empty objective keys retain unassigned items.
+      Filter original UTC sitting starts for a cohort of attempts. Scores reflect the latest corrected item records, including answers or corrections after a selected period ended. The
+      replacement is scheduled every four hours after the physical attempts, structure
+      and both item evidence refreshes. New source corrections, roster or mapping
+      changes may revise past rows. Apply authorized class/institution filters on read.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [institution_id, ccx_id, actor_id, provider, attempt_key, taxonomy_id, domain_id, subdomain_id]
+      - dbt_utils.expression_is_true:
+          expression: "provider != 'measureup' OR version_status = 'verified' OR (empty(taxonomy_id) AND isNull(domain_id) AND isNull(domain_name) AND isNull(subdomain_id) AND isNull(subdomain_name) AND isNull(score))"
+      - dbt_utils.expression_is_true:
+          expression: "score IS NULL OR (score >= 0 AND score <= 1 AND observed_denominator > 0 AND coverage_status IN ('scored', 'domain_only'))"
+      - dbt_utils.expression_is_true:
+          expression: "isNull(is_weak) = (isNull(subdomain_id) OR isNull(score)) AND ifNull(is_weak = (score < 0.70), 1)"
+    columns:
+      - name: attempt_key
+        data_tests: [not_null]
+      - name: provider
+        data_tests:
+          - accepted_values:
+              values: [native, measureup]
+      - name: taxonomy_id
+        description: >-
+          studio:<taxonomy PK> for native objectives or measureup:<versioned exam-test PK>
+          for provider objectives. Domain and subdomain IDs are source-native PKs and
+          current names are display labels. Provider and Studio IDs have no crosswalk.
+      - name: observed_numerator
+        description: Allocated earned points for native items or correct items for MeasureUp, restricted to resolved and scoreable items. May be partial.
+      - name: observed_denominator
+        description: Allocated possible points for native items or eligible binary items for MeasureUp. May be partial.
+      - name: score
+        description: Nullable 0–1 fraction for this group. Unknown historical assignments or attributable provider catalog conflicts withhold affected results.
+      - name: is_weak
+        description: A scored subdomain is weak strictly below 0.70. Domain-only and unavailable scores have a null flag.
+      - name: attempt_mapping_gaps
+        description: Number of attributable unresolved assignments or quarantined items that could affect any objective in this sitting.
+      - name: coverage_status
+        description: Scored, domain_only or the unresolved item statuses for this group. An otherwise scored group affected by unknown assignments reports incomplete_item_mapping.

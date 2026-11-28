@@ -1,0 +1,98 @@
+version: 2
+unit_tests:
+  - name: pss_period_retired_activities_use_master_rule_and_dated_results
+    model: fixture_period_readiness
+    config:
+      tags: [pss_readiness]
+    overrides:
+      vars:
+        pss_readiness_mean_activity_masters: [course-v1:O+Approved+R]
+        pss_current_score_rules:
+          course-v1:O+LMS+R: {Quiz: lms_subsection}
+          course-v1:O+Provider+R: {Quiz: measureup_latest_finished}
+    given:
+      - input: ref('fixture_authorized_classes')
+        format: sql
+        rows: |
+          select 'I' as institution_id, arrayJoin(['A','B','C','D','E','F','G','H','I']) as ccx_id
+      - input: ref('int_pss_class_inventory_coverage')
+        format: sql
+        rows: |
+          select 'I' as institution_id, ccx_id,
+            multiIf(ccx_id='A','course-v1:O+LMS+R',ccx_id='E','course-v1:O+Missing+R',
+              ccx_id='F','course-v1:O+Zero+R',ccx_id='I','course-v1:O+Approved+R','course-v1:O+Provider+R') as master_course,
+            'v' as snapshot_id, 'classified' as inventory_status
+          from values('ccx_id String','A','B','C','D','E','F','G','H','I')
+      - input: ref('int_pss_learner_class_context')
+        format: sql
+        rows: |
+          select arrayJoin(['A','B','C','D','E','F','G','H','I']) as ccx_id,'L' as actor_id,1 as is_registered
+      - input: ref('int_pss_readiness_history_coverage')
+        format: sql
+        rows: |
+          select ccx_id, 'I' as institution_id, 'L' as actor_id, 'v' as snapshot_id,
+            arrayJoin(['Quiz','Lab','Practice Exam']) as activity_type, true as full_history,
+            toDateTime('2026-11-03','UTC') as checked_at,
+            cast(null as Nullable(DateTime)) as starts_at, starts_at as ends_at
+          from values('ccx_id String','A','B','C','D','E','F','G','H','I')
+      - input: ref('int_pss_readiness_evidence')
+        format: sql
+        rows: |
+          select 'I' as institution_id,ccx_id,'L' as actor_id,
+            multiIf(ccx_id='A','course-v1:O+LMS+R',ccx_id='E','course-v1:O+Missing+R',
+              ccx_id='F','course-v1:O+Zero+R',ccx_id='I','course-v1:O+Approved+R','course-v1:O+Provider+R') as master_course,
+            attempt as source_key,if(ccx_id in ('H','I'),attempt,'retired') as subsection_block_id,kind as activity_type,
+            'sitting' as evidence_kind,1 as eligible,1 as finished,0 as native_grade_count,
+            toDateTime64('2026-11-02 10:00:00',6,'UTC') as started_at,
+            started_at + toIntervalMinute(finish) as observed_at,score as score_pct,
+            if(kind='Practice Exam',1,null) as correct_items,if(kind='Practice Exam',1,null) as total_items
+          from values('ccx_id String,attempt String,kind String,finish UInt32,score Float64',
+            ('A','a1','Quiz',1,60),('B','b1','Quiz',1,30),('B','b2','Quiz',5,80),
+            ('B','b3','Quiz',60,100),('C','c1','Quiz',60,95),('D','d1','Practice Exam',61,100),('E','e1','Quiz',1,80),
+            ('F','f1','Quiz',1,80),('H','h1','Quiz',1,20),('H','h2','Quiz',2,40),
+            ('I','i1','Quiz',1,20),('I','i2','Quiz',2,40))
+      - input: ref('int_pss_grading_policy')
+        format: sql
+        rows: |
+          select master_course,activity_type,if(activity_type='Quiz' and master_course='course-v1:O+Zero+R',0.,20.) as weight
+          from values('master_course String','course-v1:O+LMS+R','course-v1:O+Provider+R',
+                'course-v1:O+Zero+R','course-v1:O+Missing+R','course-v1:O+Approved+R')
+          array join ['Quiz','Lab','Practice Exam'] as activity_type
+          where activity_type!='Quiz' or master_course!='course-v1:O+Missing+R'
+      - input: ref('int_pss_activity_catalog')
+        format: sql
+        rows: |
+          select '' as institution_id,'' as ccx_id,'' as master_course,'' as activity_type,
+            '' as subsection_block_id,'' as snapshot_id,false as in_latest_publish limit 0
+      - input: ref('int_pss_master_publication')
+        format: sql
+        rows: |
+          select '' as master_course,'' as snapshot_id,toDateTime('2026-10-01') as published_time limit 0
+      - input: ref('int_pss_activity_attempt_coverage')
+        format: sql
+        rows: |
+          select '' as ccx_id,'' as subsection_block_id,'' as snapshot_id,
+            toDateTime('2026-11-02') as coverage_start,coverage_start as coverage_end limit 0
+    expect:
+      format: sql
+      rows: |
+        select 'I' as institution_id, ccx_id,
+          multiIf(ccx_id='A','course-v1:O+LMS+R',ccx_id='E','course-v1:O+Missing+R',
+              ccx_id='F','course-v1:O+Zero+R',ccx_id='I','course-v1:O+Approved+R','course-v1:O+Provider+R') as master_course, 'L' as actor_id,
+          readiness_score, readiness_status, readiness_unavailable_reason,
+          if(readiness_score is null,0.0,20.0) as contributing_weight, quiz_status,
+          quiz_sittings, quiz_activities, multiIf(ccx_id='E',null,ccx_id='F',0.0,20.0) as quiz_weight,
+          readiness_score as quiz_score, 'no_eligible_attempts' as lab_status, 0 as lab_sittings,
+          0 as lab_activities, 20.0 as lab_weight, cast(null as Nullable(Float64)) as lab_score, practice_status,
+          ccx_id='D' as practice_sittings, ccx_id='D' as practice_activities, 20.0 as practice_weight,
+          cast(null as Nullable(Float64)) as practice_score, 0 as observed_practice_correct_items, 0 as observed_practice_total_items
+        from values('ccx_id String, quiz_sittings UInt64, quiz_activities UInt64, quiz_status String, practice_status String, readiness_score Nullable(Float64), readiness_status Nullable(String), readiness_unavailable_reason Nullable(String)',
+          ('A',1,1,'period_score_history_unavailable','no_eligible_attempts',null,null,'period_score_history_unavailable'),
+          ('B',3,1,'contributed','no_eligible_attempts',0.8,'On Target',null),
+          ('C',1,1,'period_score_history_unavailable','no_eligible_attempts',null,null,'period_score_history_unavailable'),
+          ('D',0,0,'no_eligible_attempts','period_score_history_unavailable',null,null,'period_score_history_unavailable'),
+          ('E',1,1,'weight_unavailable','no_eligible_attempts',null,null,'weight_unavailable'),
+          ('F',1,1,'zero_weight','no_eligible_attempts',null,null,'zero_eligible_weight'),
+          ('G',0,0,'no_eligible_attempts','no_eligible_attempts',null,null,'no_eligible_attempts'),
+          ('H',2,2,'activity_aggregation_unapproved','no_eligible_attempts',null,null,'activity_aggregation_unapproved'),
+          ('I',2,2,'contributed','no_eligible_attempts',0.3,'At Risk',null))

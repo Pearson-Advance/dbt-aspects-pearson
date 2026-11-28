@@ -99,14 +99,14 @@ def sink(f, name, data, timestamp=T1, deleted=False):
     )
 
 
-def publication(f, *, revision=1, published_at=T1, quiz_assignment="Quiz"):
+def publication(f, *, revision=1, published_at=T1, quiz_assignment="Quiz", lab_lti=False):
     subsections, structure = [], [
         ("course", "course", 0, 0, 0),
         ("chapter", "section", 1, 0, 0),
     ]
     for pos, (key, activity_type) in enumerate(SECTION_TYPES.items(), 1):
         problems = PROBLEMS.get(key, [])
-        lti = key in ("final", "quiz", "practice")
+        lti = key in ("final", "quiz", "practice") or (key == "lab" and lab_lti)
         structure.extend(
             [("sequential", key, 1, pos, 0), ("vertical", key + "-unit", 1, pos, 1)]
         )
@@ -166,9 +166,9 @@ def publication(f, *, revision=1, published_at=T1, quiz_assignment="Quiz"):
     )
 
 
-def load_scope(f):
+def load_scope(f, *, lab_lti=False):
     lms_inputs(f)
-    publication(f)
+    publication(f, lab_lti=lab_lti)
     f.insert(
         "event_sink.external_id",
         [
