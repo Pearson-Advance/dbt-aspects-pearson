@@ -1,0 +1,10 @@
+version: 2
+sources:
+  - name: pss_event_sink
+    schema: "{{ env_var('ASPECTS_EVENT_SINK_DATABASE', 'event_sink') }}"
+    tables:
+      - name: pss_subsection_assignment_types
+        description: >-
+          One atomic published Studio course snapshot per observation. The array
+          contains every published subsection, including ungraded ones, in course
+          order. An empty array records an observed publication with no subsections.

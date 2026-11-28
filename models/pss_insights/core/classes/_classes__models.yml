@@ -1,0 +1,50 @@
+version: 2
+
+models:
+  - name: int_pss_class_scope
+    description: >
+      One row per in-scope CCX from the class context. The class context owns
+      eligibility, institution, license status and master provenance.
+    columns:
+      - name: institution_ccx_id
+        description: InstitutionCCX primary key.
+        data_tests:
+          - unique
+          - not_null
+      - name: ccx_id
+        description: CCX course key (ccx-v1:ORG+COURSE+RUN+ccx@N).
+        data_tests:
+          - unique
+          - not_null
+      - name: license_status
+        description: active / disabled / deleted, exposed for filtering.
+      - name: master_course
+        description: >
+          Master course key (course-v1). Taken from the CCX key when the sink
+          left it empty. Classes with an unresolved master remain in class scope and cannot join a master inventory.
+        data_tests:
+          - not_null:
+              config:
+                severity: warn
+      - name: master_course_from_ccx_key
+        description: >
+          True when master_course was empty in Course Licensing and was
+          derived from the CCX key. Listed by a warn test.
+        data_tests:
+          - accepted_values:
+              values: [false]
+              quote: false
+              config:
+                severity: warn
+      - name: ccx_number
+        description: The N in ccx@N, used to build CCX block keys.
+
+  - name: int_pss_master_course_scope
+    description: >
+      One row per master course with at least one in-scope class. The PSS
+      models only cover these courses.
+    columns:
+      - name: master_course
+        data_tests:
+          - unique
+          - not_null

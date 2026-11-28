@@ -27,3 +27,31 @@ clean-targets:
 models:
   dbt_aspects_pearson:
     +materialized: view
+
+seeds:
+  dbt_aspects_pearson:
+    pss_insights:
+      +tags: ["pss_insights"]
+      pss_grading_policy:
+        +column_types:
+          master_course: String
+          activity_type: String
+          weight: Nullable(Float64)
+          final_exam_pass_rule: Nullable(String)
+          final_exam_pass_mark: Nullable(Float64)
+
+      pss_assignment_type_mapping:
+        +column_types:
+          master_course: String
+          assignment_type: String
+          activity_type: String
+      pss_curriculum_applicability:
+        +column_types:
+          ccx_id: String
+          master_course: String
+          snapshot_id: String
+          rule: String
+          subsection_block_id: String
+
+vars:
+  pss_activity_types: ["Quiz", "Lab", "Practice Exam", "Final Exam"]

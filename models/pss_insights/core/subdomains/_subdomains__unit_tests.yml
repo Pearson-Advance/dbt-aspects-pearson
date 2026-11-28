@@ -1,0 +1,203 @@
+# Fixtures use format: sql (dbt-clickhouse 1.9.4 fails on list-of-dicts rows,
+# see course_licensing/core/classes/_classes__unit_tests.yml), so expected rows
+# list every model column. Taxonomy 30 = subdomains, 20 = Blooms (not read).
+unit_tests:
+  - name: test_pss_quiz_item_subdomain_map
+    description: >
+      One subdomain; several subdomains; domain-only tag; domain + own
+      subdomain (domain dropped); repeated tag collapsed to the newest
+      assignment; untagged question absent; Blooms ignored; stale tag on a
+      block not in the structure; library and out-of-scope blocks ignored;
+      missing or non-root parent gives null domain columns. A removed problem
+      keeps its mapping without acquiring a replacement subsection by position.
+      Current assignments to a stale Quiz subsection are withheld.
+    model: int_pss_quiz_item_subdomain_map
+    given:
+      - input: ref("int_pss_master_course_scope")
+        format: sql
+        rows: |
+          select cast('course-v1:O+C+R' as Nullable(String)) as master_course
+      - input: ref("int_pss_quiz_taxonomy_scope")
+        format: sql
+        rows: |
+          select 'course-v1:O+C+R' as master_course, toInt32(30) as taxonomy_id
+          union all select 'course-v1:X+Y+Z', 20
+      - input: ref("int_pss_quiz_item_structure_coverage")
+        format: sql
+        rows: |
+          select 'course-v1:O+C+R' as master_course, 'block-v1:O+C+R+type@sequential+block@s1' as subsection_block_id, 'counts_match' as structure_status
+          union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@sequential+block@stale', 'problem_count_mismatch'
+      - input: ref("int_tags_object_tag_current")
+        format: sql
+        rows: |
+          select toInt32(1) as id, 'block-v1:O+C+R+type@problem+block@one' as object_id, toInt32(30) as taxonomy, toInt32(311) as tag
+          union all select 2, 'block-v1:O+C+R+type@problem+block@one', 30, 311
+          union all select 3, 'block-v1:O+C+R+type@problem+block@two', 30, 311
+          union all select 4, 'block-v1:O+C+R+type@problem+block@two', 30, 312
+          union all select 5, 'block-v1:O+C+R+type@problem+block@domonly', 30, 301
+          union all select 6, 'block-v1:O+C+R+type@problem+block@both', 30, 301
+          union all select 7, 'block-v1:O+C+R+type@problem+block@both', 30, 311
+          union all select 8, 'block-v1:O+C+R+type@problem+block@one', 20, 201
+          union all select 9, 'block-v1:O+C+R+type@problem+block@gone', 30, 311
+          union all select 10, 'lb:O:LIB:problem:one', 30, 311
+          union all select 11, 'block-v1:X+Y+Z+type@problem+block@out', 30, 311
+          union all select 12, 'block-v1:O+C+R+type@problem+block@orphan', 30, 399
+          union all select 13, 'block-v1:O+C+R+type@problem+block@wrong_taxonomy', 30, 201
+          union all select 14, 'block-v1:O+C+R+type@problem+block@removed', 30, 312
+          union all select 15, 'block-v1:O+C+R+type@problem+block@deep', 30, 313
+          union all select 16, 'block-v1:O+C+R+type@problem+block@stale', 30, 311
+      - input: ref("dim_most_recent_tags")
+        format: sql
+        rows: |
+          select toInt32(301) as id, toInt32(30) as taxonomy, toInt32(0) as parent, 'Domain 1' as value,
+              'D1' as external_id, '["Domain 1"]' as lineage
+          union all select 311, 30, 301, '1.1 Controls', 'D1.1', '["Domain 1", "1.1 Controls"]'
+          union all select 312, 30, 301, '1.2 Concepts', 'D1.2', '["Domain 1", "1.2 Concepts"]'
+          union all select 313, 30, 311, 'Deeper', 'D1.1.x', '["Domain 1", "1.1 Controls", "Deeper"]'
+          union all select 399, 30, 398, '9.9 Orphan', 'D9.9', '["Domain 9", "9.9 Orphan"]'
+          union all select 201, 20, 0, 'Apply', '', '["Apply"]'
+      - input: ref("dim_course_blocks")
+        format: sql
+        rows: |
+          select 'course-v1:O+C+R' as course_key, 'block-v1:O+C+R+type@problem+block@one' as block_id,
+              'block-v1:O+C+R+type@sequential+block@s1' as subsection_block_id, true as graded,
+              true as in_latest_publish, 'problem' as block_type
+          union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@problem+block@stale', 'block-v1:O+C+R+type@sequential+block@stale', true, true, 'problem'
+          union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@problem+block@two', 'block-v1:O+C+R+type@sequential+block@s1', true, true, 'problem'
+          union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@problem+block@domonly', 'block-v1:O+C+R+type@sequential+block@s1', true, true, 'problem'
+          union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@problem+block@both', 'block-v1:O+C+R+type@sequential+block@s1', true, true, 'problem'
+          union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@problem+block@untagged', 'block-v1:O+C+R+type@sequential+block@s1', true, true, 'problem'
+          union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@problem+block@orphan', 'block-v1:O+C+R+type@sequential+block@s1', true, true, 'problem'
+          union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@problem+block@removed', 'block-v1:O+C+R+type@sequential+block@replacement', true, false, 'problem'
+      - input: ref("dim_most_recent_taxonomies")
+        format: sql
+        rows: |
+          select toInt32(30) as id, 'Fixture objectives' as name
+    expect:
+      format: sql
+      rows: |
+        select 'course-v1:O+C+R' as master_course, 'block-v1:O+C+R+type@problem+block@one' as problem_block_id,
+            cast('block-v1:O+C+R+type@sequential+block@s1' as Nullable(String)) as subsection_block_id,
+            true as graded, true as in_latest_publish, true as in_course_structure,
+            toInt32(30) as taxonomy_id, cast('Fixture objectives' as Nullable(String)) as taxonomy_name,
+            cast(301 as Nullable(Int32)) as domain_tag_id, cast('Domain 1' as Nullable(String)) as domain_name,
+            cast('D1' as Nullable(String)) as domain_external_id,
+            cast(311 as Nullable(Int32)) as subdomain_tag_id,
+            cast('1.1 Controls' as Nullable(String)) as subdomain_name,
+            cast('D1.1' as Nullable(String)) as subdomain_external_id,
+            cast('["Domain 1", "1.1 Controls"]' as Nullable(String)) as lineage,
+            toUInt64(1) as item_subdomain_count, toInt32(2) as object_tag_id
+        union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@problem+block@two', 'block-v1:O+C+R+type@sequential+block@s1', true, true, true, 30, 'Fixture objectives', 301, 'Domain 1', 'D1', 311, '1.1 Controls', 'D1.1', '["Domain 1", "1.1 Controls"]', 2, 3
+        union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@problem+block@two', 'block-v1:O+C+R+type@sequential+block@s1', true, true, true, 30, 'Fixture objectives', 301, 'Domain 1', 'D1', 312, '1.2 Concepts', 'D1.2', '["Domain 1", "1.2 Concepts"]', 2, 4
+        union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@problem+block@domonly', 'block-v1:O+C+R+type@sequential+block@s1', true, true, true, 30, 'Fixture objectives', 301, 'Domain 1', 'D1', null, null, null, '["Domain 1"]', 1, 5
+        union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@problem+block@both', 'block-v1:O+C+R+type@sequential+block@s1', true, true, true, 30, 'Fixture objectives', 301, 'Domain 1', 'D1', 311, '1.1 Controls', 'D1.1', '["Domain 1", "1.1 Controls"]', 1, 7
+        union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@problem+block@gone', null, false, false, false, 30, 'Fixture objectives', 301, 'Domain 1', 'D1', 311, '1.1 Controls', 'D1.1', '["Domain 1", "1.1 Controls"]', 1, 9
+        union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@problem+block@orphan', 'block-v1:O+C+R+type@sequential+block@s1', true, true, true, 30, 'Fixture objectives', null, null, null, 399, '9.9 Orphan', 'D9.9', '["Domain 9", "9.9 Orphan"]', 1, 12
+        union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@problem+block@removed', null, true, false, true, 30, 'Fixture objectives', 301, 'Domain 1', 'D1', 312, '1.2 Concepts', 'D1.2', '["Domain 1", "1.2 Concepts"]', 1, 14
+        union all select 'course-v1:O+C+R', 'block-v1:O+C+R+type@problem+block@deep', null, false, false, false, 30, 'Fixture objectives', null, null, null, 313, 'Deeper', 'D1.1.x', '["Domain 1", "1.1 Controls", "Deeper"]', 1, 15
+
+  - name: test_pss_quiz_item_subdomain_coverage
+    model: int_pss_quiz_item_subdomain_coverage
+    given:
+      - input: ref("int_pss_master_course_scope")
+        format: sql
+        rows: |
+          select * from values('master_course String', ('A'), ('B'), ('C'), ('D'), ('E'), ('F'))
+      - input: ref("int_pss_quiz_taxonomy_scope")
+        format: sql
+        rows: |
+          select 'A' as master_course, toInt32(30) as taxonomy_id union all select 'C', 31 union all select 'D', 30 union all select 'E', 30 union all select 'F', 30
+      - input: ref("dim_most_recent_taxonomies")
+        format: sql
+        rows: |
+          select toInt32(30) as id, 'Synthetic taxonomy' as name
+      - input: ref("dim_course_blocks")
+        format: sql
+        rows: |
+          select * from values('course_key String, block_id String, subsection_block_id String, block_type String, graded Bool, in_latest_publish Bool',
+            ('A','two','s','problem',1,1),('A','domain','s','problem',1,1),
+            ('A','untagged','s','problem',1,1),('A','lab','lab','problem',1,1),
+            ('A','ungraded','s','problem',0,1),('A','old','s','problem',1,0),
+            ('A','launch','s','lti_consumer',1,1),('B','unconfigured','s','problem',1,1),
+            ('D','valid','s','problem',1,1),('D','stale','stale','problem',1,1),('E','unclassified','s','problem',1,1))
+      - input: ref("int_pss_quiz_item_structure_coverage")
+        format: sql
+        rows: |
+          select * from values('master_course String, subsection_block_id String, structure_status String',
+            ('A','s','counts_match'),('B','s','counts_match'),('D','s','counts_match'),('D','stale','problem_count_mismatch'))
+      - input: ref("int_pss_master_inventory_coverage")
+        format: sql
+        rows: |
+          select * from values('master_course String, inventory_status String', ('A','classified'),('B','classified'),
+            ('C','no_graded_subsections'),('D','classified'),('E','partially_classified'),('F','structure_disagrees'))
+      - input: ref("int_pss_quiz_item_subdomain_map")
+        format: sql
+        rows: |
+          select * from values('master_course String, problem_block_id String, subdomain_tag_id Nullable(Int32)',
+            ('A','two',311),('A','two',312),('A','domain',NULL),('D','valid',311))
+    expect:
+      format: sql
+      rows: |
+        select * from values('master_course String, configured_taxonomy_count UInt64, available_taxonomy_count UInt64, taxonomy_scope_available Bool, quiz_structure_status String, graded_problem_count UInt64,
+          tagged_graded_problem_count Nullable(UInt64), untagged_graded_problem_count Nullable(UInt64),
+          quiz_problem_count Nullable(UInt64), quiz_problems_with_subdomain Nullable(UInt64), quiz_problems_domain_only Nullable(UInt64),
+          quiz_problems_without_mapping Nullable(UInt64)',
+          ('A',1,1,1,'counts_match',4,2,2,3,1,1,1),('B',0,0,0,'counts_match',1,NULL,NULL,1,NULL,NULL,NULL),
+          ('C',1,0,0,'counts_match',0,NULL,NULL,0,NULL,NULL,NULL),
+          ('D',1,1,1,'structure_disagrees',2,NULL,NULL,NULL,NULL,NULL,NULL),
+          ('E',1,1,1,'classification_incomplete',1,0,1,NULL,NULL,NULL,NULL),
+          ('F',1,1,1,'structure_disagrees',0,NULL,NULL,NULL,NULL,NULL,NULL))
+
+  - name: test_pss_taxonomy_scope_distinguishes_runs
+    model: int_pss_quiz_taxonomy_scope
+    overrides:
+      vars:
+        pss_quiz_taxonomies_by_master:
+          "course-v1:O+C+R": [30, 30]
+          "course-v1:O+C+Alternate": [31]
+    given:
+      - input: ref("int_pss_master_course_scope")
+        format: sql
+        rows: |
+          select * from values('master_course String', ('course-v1:O+C+R'),('course-v1:O+C+Alternate'),('course-v1:O+C+R2'))
+    expect:
+      format: sql
+      rows: |
+        select * from values('master_course String, taxonomy_id Int32', ('course-v1:O+C+R',30),('course-v1:O+C+Alternate',31))
+
+  - name: test_pss_quiz_item_structure_coverage
+    description: >-
+      A confirmed empty Quiz has a current subsection row. Missing subsections and
+      missing counts are distinct. Current ungraded problem blocks are counted once,
+      while removed blocks, other activity types and old Quiz subsections are excluded.
+    model: int_pss_quiz_item_structure_coverage
+    given:
+      - input: ref("int_pss_master_course_scope")
+        format: sql
+        rows: |
+          select 'A' as master_course
+      - input: ref("int_pss_activity_type_coverage")
+        format: sql
+        rows: |
+          select * from values('master_course String, subsection_block_id String, snapshot_id String, problem_count Nullable(UInt64), activity_type String, coverage_status String, in_latest_publish Bool',
+            ('A','matched','pub',2,'Quiz','classified',1),('A','mismatch','pub',2,'Quiz','classified',1),
+            ('A','empty','pub',0,'Quiz','classified',1),('A','absent','pub',0,'Quiz','classified',1),
+            ('A','unknown','pub',NULL,'Quiz','classified',1),('A','lab','pub',0,'Lab','classified',1),
+            ('A','retired','past',1,'Quiz','removed',0))
+      - input: ref("dim_course_blocks")
+        format: sql
+        rows: |
+          select * from values('course_key String, block_id String, subsection_block_id String, block_type String, graded Bool, in_latest_publish Bool',
+            ('A','matched','matched','subsection',1,1),('A','mismatch','mismatch','subsection',1,1),
+            ('A','empty','empty','subsection',1,1),('A','unknown','unknown','subsection',1,1),
+            ('A','graded','matched','problem',1,1),('A','ungraded','matched','problem',0,1),
+            ('A','graded','matched','problem',1,1),('A','gone','matched','problem',1,0),
+            ('A','only','mismatch','problem',1,1))
+    expect:
+      format: sql
+      rows: |
+        select * from values('master_course String, subsection_block_id String, snapshot_id String,
+          expected_problem_count Nullable(UInt64), observed_problem_count UInt64, structure_status String',
+          ('A','matched','pub',2,2,'counts_match'),('A','mismatch','pub',2,1,'problem_count_mismatch'),
+          ('A','empty','pub',0,0,'counts_match'),('A','absent','pub',0,0,'missing_subsection'),
+          ('A','unknown','pub',NULL,0,'missing_expected_count'))

@@ -1,0 +1,186 @@
+unit_tests:
+  - name: test_pss_inventory_reasons_use_current_graded_rows
+    model: int_pss_master_inventory_coverage
+    given:
+      - input: ref('int_pss_master_publication')
+        format: sql
+        rows: |
+          select master_course, 'v2' as snapshot_id, toDateTime64('2026-11-10',6,'UTC') as published_time, publication_status
+          from values('master_course String, publication_status String',
+            ('A','observed'),('B','observed'),('C','missing_publication'),('D','structure_disagrees'))
+      - input: ref('int_pss_activity_type_coverage')
+        format: sql
+        rows: |
+          select * from values('master_course String, coverage_status String, in_latest_publish UInt8',
+            ('A','classified',0),('A','unmapped_assignment_type',1),('D','assignment_type_unavailable',1))
+    expect:
+      format: sql
+      rows: |
+        select master_course, 'v2' as snapshot_id, toDateTime64('2026-11-10',6,'UTC') as published_time,
+          publication_status, graded as observed_graded_subsections, classified as observed_classified_subsections, inventory_status
+        from values('master_course String, publication_status String, graded UInt64, classified UInt64, inventory_status String',
+          ('A','observed',1,0,'graded_not_classified'),('B','observed',0,0,'no_graded_subsections'),
+          ('C','missing_publication',0,0,'missing_publication'),('D','structure_disagrees',1,0,'structure_disagrees'))
+
+  - name: test_pss_catalog_applies_subsets_before_sequencing
+    model: int_pss_activity_catalog
+    given:
+      - input: ref('int_pss_class_scope')
+        format: sql
+        rows: |
+          select n as institution_ccx_id, '7' as institution_id, '3' as license_id, 'active' as license_status,
+             concat('ccx-v1:O+C+R+ccx@',n) as ccx_id, n as class_name, 'course-v1:O+C+R' as master_course, n as ccx_number
+          from values('n String', ('1'), ('2'), ('3'))
+      - input: ref('int_pss_subsection_assignments')
+        format: sql
+        rows: |
+          select 'course-v1:O+C+R' as master_course, concat('block-v1:O+C+R+type@sequential+block@',name) as subsection_block_id,
+            name as subsection_name, 'section' as section_block_id, 'Section' as section_name, toUInt32(1) as section_course_order,
+            ord as subsection_course_order, snap as snapshot_id, published as in_latest_publish, typ as assignment_type,
+            if(status='classified',typ,null) as activity_type, 1 as graded, if(snap='v1',1,2) as published_time
+          from values('name String, ord UInt32, snap String, published UInt8, typ String, status String',
+            ('old',1,'v1',0,'Quiz','classified'),('q',2,'v1',0,'Quiz','classified'),('q',2,'v2',1,'Quiz','classified'),('l',4,'v2',1,'Lab','classified'),
+            ('h',5,'v2',1,'Homework','unmapped_assignment_type'))
+      - input: ref('int_pss_class_publication_applicability')
+        format: sql
+        rows: |
+          select concat('ccx-v1:O+C+R+ccx@',n) as ccx_id, 'course-v1:O+C+R' as master_course,
+            ver as snapshot_id, rule as scope_rule, arr as allowed_subsections
+          from values('n String, ver String, rule String, arr Array(String)',
+            ('1','v2','inherit_master',[]),('1','v1','inherit_master',[]),
+            ('2','v1','inherit_master',[]),('2','v2','include_subsection',['block-v1:O+C+R+type@sequential+block@l']))
+      - input: ref('int_pss_master_publication')
+        format: sql
+        rows: |
+          select 'course-v1:O+C+R' as master_course, 'observed' as publication_status
+    expect:
+      format: sql
+      rows: |
+        select n as institution_ccx_id, '7' as institution_id, '3' as license_id, 'active' as license_status,
+          concat('ccx-v1:O+C+R+ccx@',n) as ccx_id, n as class_name, 'course-v1:O+C+R' as master_course,
+          concat('block-v1:O+C+R+type@sequential+block@',name) as subsection_block_id,
+          concat('ccx-block-v1:O+C+R+ccx@',n,'+type@sequential+block@',name) as ccx_subsection_block_id,
+          name as subsection_name, if(published,'section',null) as section_block_id, if(published,'Section',null) as section_name,
+          if(published,toUInt32(1),null) as section_course_order, ord as subsection_course_order, seq as activity_sequence,
+          typ as activity_type, typ as assignment_type, ver as snapshot_id, published as in_latest_publish
+        from values('n String, name String, ord UInt32, seq Nullable(UInt64), typ String, ver String, published UInt8',
+          ('1','old',1,null,'Quiz','v1',0),('1','q',2,1,'Quiz','v2',1),('1','l',4,2,'Lab','v2',1),('2','l',4,1,'Lab','v2',1),('2','q',2,null,'Quiz','v1',0),('2','old',1,null,'Quiz','v1',0))
+
+  - name: test_pss_publish_replay_cannot_promote_an_old_revision
+    model: int_pss_assignment_publications
+    given:
+      - input: ref('int_pss_master_course_scope')
+        format: sql
+        rows: |
+          select * from values('master_course String', ('A'),('B'),('C'),('D'))
+      - input: source('pss_event_sink','pss_subsection_assignment_types')
+        format: sql
+        rows: |
+          select *, cast(if(course_key='D' and time_last_dumped='2026-11-30',[('changed',1,2)],[]) as Array(Tuple(subsection_block_id String,section_order UInt32,subsection_order UInt32))) as subsections
+          from values('course_key String, published_at String, time_last_dumped String, head_confirmed_at Nullable(String), snapshot_id String',
+             ('A','2026-11-01','2026-11-01','2026-11-01','old'),('A','2026-11-01','2026-11-30',null,'old'),
+             ('A','2026-11-10','2026-11-10',null,'new'),('B','2026-11-11','2026-11-11','2026-11-11','one'),
+             ('B','2026-11-11','2026-11-11','2026-11-11','two'),
+             ('C','2026-11-12','2026-11-12','2026-11-12','reused'),('C','2026-11-13','2026-11-13','2026-11-13','reused'),
+             ('D','2026-11-01','2026-11-01','2026-11-01','same'),('D','2026-11-01','2026-11-30',null,'same'))
+    expect:
+      format: sql
+      rows: |
+        select master_course, parseDateTime64BestEffortOrNull(date,6,'UTC') as published_time,
+           parseDateTime64BestEffortOrNull(confirmed,6,'UTC') as head_confirmed_at, id as snapshot_id,
+           cast([] as Array(Tuple(subsection_block_id String,section_order UInt32,subsection_order UInt32))) as subsections,
+           status as snapshot_status, latest as is_latest
+        from values('master_course String, date String, confirmed Nullable(String), id String, status String, latest UInt8',
+          ('A','2026-11-01','2026-11-01','old','observed',0),('A','2026-11-10',null,'new','observed',1),
+          ('B','2026-11-11','2026-11-11','','conflicting_publication',1),
+          ('C','2026-11-12','2026-11-12','','conflicting_publication',0),('C','2026-11-13','2026-11-13','','conflicting_publication',1),
+          ('D','2026-11-01','2026-11-01','','conflicting_publication',1))
+
+  - name: test_pss_master_publication_requires_current_head_evidence
+    model: int_pss_master_publication
+    given:
+      - input: ref('int_pss_master_course_scope')
+        format: sql
+        rows: |
+          select * from values('master_course String',('A'),('B'),('C'),('D'),('E'))
+      - input: ref('int_pss_assignment_publications')
+        format: sql
+        rows: |
+          select k as master_course, 'version' as snapshot_id, toNullable(toDateTime64('2026-11-01',6,'UTC')) as published_time,
+            parseDateTime64BestEffortOrNull(confirmed,6,'UTC') as head_confirmed_at, 'observed' as snapshot_status, 1 as is_latest,
+            cast([] as Array(Tuple(subsection_block_id String,graded UInt8))) as subsections
+          from values('k String, confirmed Nullable(String)',('A','2026-11-01'),('B',null),('C','2026-11-01'),('E','2026-11-01'))
+      - input: source('event_sink','course_overviews')
+        format: sql
+        rows: |
+          select 'A' as course_key, '2026-11-02' as modified
+      - input: ref('dim_course_blocks')
+        format: sql
+        rows: |
+          select 'C' as course_key, 'subsection' as block_type, 'other' as block_id, true as graded, true as in_latest_publish
+    expect:
+      format: sql
+      rows: |
+        select master_course, if(master_course='D',null,'version') as snapshot_id,
+          if(master_course='D',null,toDateTime64('2026-11-01',6,'UTC')) as published_time, status as publication_status
+        from values('master_course String, status String',
+          ('A','newer_course_overview'),('B','unconfirmed_publication'),('C','structure_disagrees'),
+          ('D','missing_publication'),('E','observed'))
+
+  - name: test_pss_stale_class_rules_withhold_master_inheritance
+    model: int_pss_class_publication_applicability
+    given:
+      - input: ref('int_pss_class_scope')
+        format: sql
+        rows: |
+          select n as ccx_id, 'M' as master_course from values('n String',('A'),('B'),('C'),('D'))
+      - input: ref('int_pss_assignment_publications')
+        format: sql
+        rows: |
+          select 'M' as master_course, 'v2' as snapshot_id, 'observed' as snapshot_status,
+            cast([tuple('quiz')] as Array(Tuple(subsection_block_id String))) as subsections
+      - input: ref('pss_curriculum_applicability')
+        format: sql
+        rows: |
+          select 'M' as master_course, * from values('ccx_id String,snapshot_id String,rule String,subsection_block_id String',
+            ('','','inherit_master',''),('B','v1','empty',''),('C','v2','include_subsection','gone'),('D','v2','include_subsection','quiz'))
+    expect:
+      format: sql
+      rows: |
+        select ccx_id,'M' as master_course,'v2' as snapshot_id,scope_rule, allowed_subsections
+        from values('ccx_id String, scope_rule String, allowed_subsections Array(String)',
+          ('A','inherit_master',[]),('C','invalid_applicability',['gone']),('D','include_subsection',['quiz']))
+
+  - name: test_pss_conflict_exposes_current_graded_subsection_gap
+    model: int_pss_activity_type_coverage
+    given:
+      - input: ref('int_pss_master_publication')
+        format: sql
+        rows: |
+          select 'M' as master_course, 'conflicting_publication' as publication_status
+      - input: ref('int_pss_subsection_assignments')
+        format: sql
+        rows: |
+          select 'M' as master_course, id as subsection_block_id, 'old title' as subsection_name, 1 as graded,
+            0 as in_latest_publish, 'v1' as snapshot_id, 1 as published_time, 'Checkpoint' as assignment_type,
+            'Quiz' as activity_type, 'section' as section_block_id, 'First' as section_name, 1 as section_course_order,
+            2 as subsection_course_order, 3 as problem_count, 0 as lti_consumer_count, 0 as skillable_xblock_count,
+            0 as other_component_count from values('id String',('still_present'),('removed'))
+      - input: ref('dim_course_blocks')
+        format: sql
+        rows: |
+          select 'M' as course_key, id as block_id, 'structure title' as block_name, 'subsection' as block_type,
+            1 as graded, published as in_latest_publish, 4 as course_order
+          from values('id String, published UInt8',('still_present',1),('removed',0))
+    expect:
+      format: sql
+      rows: |
+        select 'M' as master_course, id as subsection_block_id, if(current,'structure title','old title') as subsection_name,
+           1 as graded, current as in_latest_publish, if(current,null,'v1') as snapshot_id,
+           if(current,null,'Checkpoint') as assignment_type, if(current,null,'Quiz') as activity_type,
+           if(current,null,'section') as section_block_id, if(current,null,'First') as section_name,
+           if(current,null,1) as section_course_order, if(current,4,2) as subsection_course_order,
+           if(current,null,3) as problem_count, if(current,null,0) as lti_consumer_count,
+           if(current,null,0) as skillable_xblock_count, if(current,null,0) as other_component_count,
+           if(current,'assignment_type_unavailable','classified') as coverage_status
+        from values('id String, current UInt8',('still_present',1),('removed',0))
